@@ -1,0 +1,2 @@
+customer,date,reference,type,cbm,storage,handlingMode,containerSize,truckCount,packageQty,packageUom,storageDays
+Example Customer Ltd,2026-07-01,REF-001,Inbound,25,Normal Storage,Container,40ft,1,100,CTN,

@@ -1,0 +1,2 @@
+customer,activity,uom,unitRate,currency,minimumFixedValue
+Example Customer Ltd,Picking,CTN,0.5,USD,0
