@@ -200,6 +200,7 @@ export default function MasterData() {
         trailer20: num(row.trailer20), trailer40: num(row.trailer40),
         loosePerCbm: num(row.loosePerCbm), minimumCharge: num(row.minimumCharge),
         monthlyMinimum: num(row.monthlyMinimum), currency: String(row.currency || 'USD'),
+        billByCbm: /^(true|1|yes|y)$/i.test(String(row.billByCbm || '').trim()),
       }, { entityType: 'Master Data', label: 'handling rates (import)' })
       imported++
     }
@@ -372,7 +373,7 @@ export default function MasterData() {
           {db.handlingRates.length === 0 ? <EmptyState icon="🚛" title="No handling rates" /> : (
             <div className="table-wrap">
               <table className="data">
-                <thead><tr><th>Customer</th><th className="num">Cont. 20ft</th><th className="num">Cont. 40ft</th><th className="num">Trailer 20ft</th><th className="num">Trailer 40ft</th><th className="num">Loose /CBM</th><th className="num">Min</th><th className="num">Monthly Min</th><th>Currency</th><th></th></tr></thead>
+                <thead><tr><th>Customer</th><th className="num">Cont. 20ft</th><th className="num">Cont. 40ft</th><th className="num">Trailer 20ft</th><th className="num">Trailer 40ft</th><th className="num">Loose /CBM</th><th className="num">Min</th><th className="num">Monthly Min</th><th>Basis</th><th>Currency</th><th></th></tr></thead>
                 <tbody>
                   {db.handlingRates.map((r) => (
                     <tr key={r.id}>
@@ -384,6 +385,7 @@ export default function MasterData() {
                       <td className="num">{fmtNum(r.loosePerCbm)}</td>
                       <td className="num">{fmtNum(r.minimumCharge)}</td>
                       <td className="num">{fmtNum(r.monthlyMinimum)}</td>
+                      <td>{r.billByCbm ? <span className="badge badge-blue">PER CBM</span> : <span className="badge badge-gray">TRUCK/CBM</span>}</td>
                       <td>{r.currency}</td>
                       <td>
                         <div className="row" style={{ gap: 5, flexWrap: 'nowrap' }}>

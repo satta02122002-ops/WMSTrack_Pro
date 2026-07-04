@@ -1,2 +1,2 @@
-customer,container20,container40,trailer20,trailer40,loosePerCbm,minimumCharge,monthlyMinimum,currency
-Example Customer Ltd,90,140,80,120,3.5,50,0,USD
+customer,container20,container40,trailer20,trailer40,loosePerCbm,minimumCharge,monthlyMinimum,currency,billByCbm
+Example Customer Ltd,90,140,80,120,3.5,50,0,USD,no

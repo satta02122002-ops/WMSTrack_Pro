@@ -71,7 +71,7 @@ For a selected month, lines come from four sources:
 | Completed normal activities | activity name | qty × unit value (customer + activity + UOM) |
 | Unit values with a monthly minimum | *Monthly Minimum Adjustment* | top-up when the group's month total is below the configured minimum (only if the group had activity that month) |
 | Storage movements | Storage In / Storage Out | storage days × CBM × storage rate. Storage days default to the days remaining in the movement's month (editable per movement) |
-| Storage movements with handling | Handling In/Out Container / Trailer / Loose | Container/Trailer: trucks × rate (by vehicle size); Loose: CBM × rate. A per-movement minimum charge applies, plus an optional monthly minimum top-up per customer |
+| Storage movements with handling | Handling In/Out Container / Trailer / Loose | Container/Trailer: trucks × rate (by vehicle size); Loose: CBM × rate. Customers flagged **"Bill all handling by CBM"** in their handling configuration are always charged CBM × loose rate — even for container/trailer movements (flagged CBM RATE in the billing table). A per-movement minimum charge applies, plus an optional monthly minimum top-up per customer |
 | VAS charges | Value Added Service | qty × charge per unit |
 
 Lines missing a configured rate are flagged **NO RATE** so master data gaps are visible instead of silently billing zero. Grand totals are shown per currency.

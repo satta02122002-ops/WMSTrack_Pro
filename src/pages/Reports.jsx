@@ -165,7 +165,7 @@ export default function Reports() {
                 <tbody>
                   {handlingLines.map((l) => (
                     <tr key={l.id}>
-                      <td>{fmtDate(l.date)}</td><td><b>{l.customerName}</b></td><td>{l.customerRef}</td><td>{l.activity}{l.minimumApplied && <span className="badge badge-amber" style={{ marginLeft: 6 }}>MIN</span>}</td>
+                      <td>{fmtDate(l.date)}</td><td><b>{l.customerName}</b></td><td>{l.customerRef}</td><td>{l.activity}{l.minimumApplied && <span className="badge badge-amber" style={{ marginLeft: 6 }}>MIN</span>}{l.cbmBasis && <span className="badge badge-blue" style={{ marginLeft: 6 }}>CBM RATE</span>}</td>
                       <td>{l.vehicleType || '—'}</td><td className="num">{l.truckCount || '—'}</td><td className="num">{l.cbmQty !== '' ? fmtNum(l.cbmQty) : '—'}</td>
                       <td className="num">{fmtNum(l.combinedRate)}</td><td className="num"><b>{fmtNum(l.totalValue)}</b></td><td>{l.currency}</td>
                     </tr>

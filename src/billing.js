@@ -90,9 +90,12 @@ export function computeBillingLines(db, period) {
     // Handling line
     if (m.handlingMode) {
       const hr = db.handlingRates.find((r) => r.customer === m.customer)
+      // Customers flagged billByCbm are always charged CBM x rate, even when the
+      // cargo moved by container/trailer (the operational details are still kept).
+      const cbmBasis = hr?.billByCbm || m.handlingMode === 'Loose'
       let rate = 0
       let amount = 0
-      if (m.handlingMode === 'Loose') {
+      if (cbmBasis) {
         rate = hr ? num(hr.loosePerCbm) : 0
         amount = round2(num(m.cbm) * rate)
       } else {
@@ -115,6 +118,7 @@ export function computeBillingLines(db, period) {
         currency: hr?.currency || cur,
         combinedRate: rate, totalValue: finalAmount,
         minimumApplied: finalAmount > amount, rateMissing: !hr,
+        cbmBasis: cbmBasis && m.handlingMode !== 'Loose',
       })
     }
   }

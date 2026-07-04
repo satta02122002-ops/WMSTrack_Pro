@@ -83,9 +83,9 @@ export const IMPORT_TEMPLATES = {
   },
   handlingRates: {
     label: 'Handling Rates',
-    headers: ['customer', 'container20', 'container40', 'trailer20', 'trailer40', 'loosePerCbm', 'minimumCharge', 'monthlyMinimum', 'currency'],
-    sample: [{ customer: 'Example Customer Ltd', container20: 90, container40: 140, trailer20: 80, trailer40: 120, loosePerCbm: 3.5, minimumCharge: 50, monthlyMinimum: 0, currency: 'USD' }],
-    note: 'container/trailer rates are per truck; loose rate is per CBM',
+    headers: ['customer', 'container20', 'container40', 'trailer20', 'trailer40', 'loosePerCbm', 'minimumCharge', 'monthlyMinimum', 'currency', 'billByCbm'],
+    sample: [{ customer: 'Example Customer Ltd', container20: 90, container40: 140, trailer20: 80, trailer40: 120, loosePerCbm: 3.5, minimumCharge: 50, monthlyMinimum: 0, currency: 'USD', billByCbm: 'no' }],
+    note: 'container/trailer rates are per truck; loose rate is per CBM; billByCbm yes = always charge CBM x loose rate even for container/trailer',
   },
   storageMovements: {
     label: 'Storage Movements',

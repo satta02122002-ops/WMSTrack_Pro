@@ -190,6 +190,7 @@ export default function MonthlyBilling() {
                           {l.activity}
                           {l.rateMissing && <span className="badge badge-red" style={{ marginLeft: 6 }} title="No rate configured in master data">NO RATE</span>}
                           {l.minimumApplied && <span className="badge badge-amber" style={{ marginLeft: 6 }} title="Per-movement minimum charge applied">MIN</span>}
+                          {l.cbmBasis && <span className="badge badge-blue" style={{ marginLeft: 6 }} title="Customer is configured to bill handling by CBM — container/trailer per-truck rates ignored">CBM RATE</span>}
                         </td>
                         <td>{l.handlingType || '—'}</td>
                         <td>{l.vehicleType || '—'}</td>

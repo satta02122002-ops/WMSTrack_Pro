@@ -99,7 +99,7 @@ export function HandlingRateModal({ rate, onClose }) {
   const [r, setR] = useState(
     rate || {
       customer: '', container20: '', container40: '', trailer20: '', trailer40: '',
-      loosePerCbm: '', minimumCharge: '', monthlyMinimum: '', currency: 'USD',
+      loosePerCbm: '', minimumCharge: '', monthlyMinimum: '', currency: 'USD', billByCbm: false,
     },
   )
   const setE = (k) => (e) => setR((s) => ({ ...s, [k]: e.target.value }))
@@ -111,7 +111,7 @@ export function HandlingRateModal({ rate, onClose }) {
       container20: num(r.container20), container40: num(r.container40),
       trailer20: num(r.trailer20), trailer40: num(r.trailer40),
       loosePerCbm: num(r.loosePerCbm), minimumCharge: num(r.minimumCharge),
-      monthlyMinimum: num(r.monthlyMinimum),
+      monthlyMinimum: num(r.monthlyMinimum), billByCbm: !!r.billByCbm,
     }, { entityType: 'Master Data', label: 'handling rates' })
     toast('Handling configuration saved')
     onClose()
@@ -144,6 +144,13 @@ export function HandlingRateModal({ rate, onClose }) {
         <Field label="Minimum charge (per movement)"><input type="number" min="0" step="0.01" value={r.minimumCharge} onChange={setE('minimumCharge')} /></Field>
         <Field label="Monthly minimum charge" hint="Top-up added at billing if month total is below this"><input type="number" min="0" step="0.01" value={r.monthlyMinimum} onChange={setE('monthlyMinimum')} /></Field>
       </div>
+      <label className="checkbox-row" style={{ marginTop: 4, padding: '10px 12px', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', borderRadius: 8 }}>
+        <input type="checkbox" checked={!!r.billByCbm} onChange={(e) => setR((s) => ({ ...s, billByCbm: e.target.checked }))} />
+        <span>
+          <b>Bill all handling by CBM</b> — charge CBM × loose rate for every movement, even container/trailer.
+          Container and trailer per-truck rates are ignored for this customer; vehicle and truck details are still recorded.
+        </span>
+      </label>
     </Modal>
   )
 }
@@ -286,7 +293,7 @@ export default function StorageHandling() {
                   <tr>
                     <th>Customer</th><th className="num">Container 20ft</th><th className="num">Container 40ft</th>
                     <th className="num">Trailer 20ft</th><th className="num">Trailer 40ft</th>
-                    <th className="num">Loose /CBM</th><th className="num">Min Charge</th><th className="num">Monthly Min</th><th>Currency</th><th></th>
+                    <th className="num">Loose /CBM</th><th className="num">Min Charge</th><th className="num">Monthly Min</th><th>Billing Basis</th><th>Currency</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -300,6 +307,7 @@ export default function StorageHandling() {
                       <td className="num">{fmtNum(r.loosePerCbm)}</td>
                       <td className="num">{fmtNum(r.minimumCharge)}</td>
                       <td className="num">{fmtNum(r.monthlyMinimum)}</td>
+                      <td>{r.billByCbm ? <span className="badge badge-blue">ALWAYS PER CBM</span> : <span className="badge badge-gray">PER TRUCK / CBM</span>}</td>
                       <td>{r.currency}</td>
                       <td>
                         <div className="row" style={{ gap: 5, flexWrap: 'nowrap' }}>
