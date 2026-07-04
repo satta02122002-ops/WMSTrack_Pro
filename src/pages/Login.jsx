@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useStore, REMEMBER_KEY } from '../store.jsx'
 import { Field } from '../components/ui.jsx'
+import Logo from '../components/Logo.jsx'
 
 export default function Login() {
   const { login } = useStore()
@@ -29,9 +30,11 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
-        <div className="login-logo">W</div>
+        <div className="login-logo">
+          <Logo size={74} />
+        </div>
         <h1>WMSTrack Pro</h1>
-        <div className="sub">Warehouse Operations Tracking &amp; Billing</div>
+        <div className="sub">Integrated Service Solutions · Warehouse Operations &amp; Billing</div>
         {error && <div className="login-error">{error}</div>}
         <Field label="User ID" required>
           <input

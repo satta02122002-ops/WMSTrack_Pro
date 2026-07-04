@@ -44,7 +44,7 @@ export default function ActivityLog() {
             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search details…" style={{ width: 180 }} />
           </div>
           <div className="row">
-            <span className="badge badge-teal">{rows.length} entries</span>
+            <span className="badge badge-brand">{rows.length} entries</span>
             <button
               className="btn btn-sm btn-outline"
               disabled={!rows.length}

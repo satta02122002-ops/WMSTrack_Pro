@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useStore, PAGES, pagesForUser } from '../store.jsx'
 import { Modal, Field } from './ui.jsx'
+import Logo from './Logo.jsx'
 import { fmtTime } from '../utils.js'
 
 function ChangePasswordModal({ onClose }) {
@@ -63,10 +64,12 @@ export default function Layout({ page, setPage, children }) {
     <div className="app-shell">
       <header className="app-header">
         <button className="hamburger" onClick={() => setMobileOpen((v) => !v)} aria-label="Menu">☰</button>
-        <div className="header-logo">W</div>
+        <div className="header-logo">
+          <Logo size={30} />
+        </div>
         <div className="header-title">
           WMSTrack Pro
-          <small>Warehouse Operations &amp; Billing</small>
+          <small>Integrated Service Solutions</small>
         </div>
         <div className="header-spacer" />
         <div className="header-user">

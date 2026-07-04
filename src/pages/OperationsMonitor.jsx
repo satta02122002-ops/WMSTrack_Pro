@@ -64,7 +64,7 @@ export default function OperationsMonitor() {
                     <td>{(a.participants || []).map((p) => p.name).join(', ') || '—'}</td>
                     <td>{fmtTime(a.startTime)}</td>
                     <td><StatusBadge status={a.status} /></td>
-                    <td className="num" style={{ fontWeight: 700, color: 'var(--teal-800)' }}>{fmtDuration(activityDuration(a))}</td>
+                    <td className="num" style={{ fontWeight: 700, color: 'var(--brand-800)' }}>{fmtDuration(activityDuration(a))}</td>
                   </tr>
                 ))}
               </tbody>

@@ -46,7 +46,7 @@ function SimpleMaster({ collection, title, icon, hint, importKind }) {
       ) : (
         <div className="row" style={{ gap: 8 }}>
           {items.map((i) => (
-            <span key={i.id} className="badge badge-teal" style={{ fontSize: 13, padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span key={i.id} className="badge badge-brand" style={{ fontSize: 13, padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               {i.name}
               <button
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 13, padding: 0 }}

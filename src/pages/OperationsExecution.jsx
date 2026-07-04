@@ -70,7 +70,7 @@ export function EndActivityModal({ activity, onClose }) {
         </>
       }
     >
-      <div className="banner banner-teal" style={{ marginBottom: 14 }}>
+      <div className="banner banner-brand" style={{ marginBottom: 14 }}>
         <b>{activity.customerName}</b>&nbsp;·&nbsp;{activity.customerRef}&nbsp;·&nbsp;Duration {fmtDuration(activityDuration(activity))}
       </div>
 
@@ -181,7 +181,7 @@ export default function OperationsExecution() {
                 <span className="pulse-dot" />
                 <StatusBadge status={myActiveActivity.status} />
                 {master?.storageType && (
-                  <span className={'badge ' + (master.storageType === 'inbound' ? 'badge-teal' : 'badge-blue')}>
+                  <span className={'badge ' + (master.storageType === 'inbound' ? 'badge-brand' : 'badge-blue')}>
                     {master.storageType.toUpperCase()}
                   </span>
                 )}

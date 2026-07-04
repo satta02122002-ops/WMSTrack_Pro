@@ -26,7 +26,7 @@ export default function PendingActivity({ setPage }) {
           <div className="row">
             <Select value={statusFilter} onChange={setStatusFilter} options={['Pending', 'Done']} placeholder="All statuses" style={{ width: 160 }} />
           </div>
-          <span className="badge badge-teal">{rows.length} row(s)</span>
+          <span className="badge badge-brand">{rows.length} row(s)</span>
         </div>
 
         {rows.length === 0 ? (

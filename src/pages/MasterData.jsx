@@ -273,7 +273,7 @@ export default function MasterData() {
                 {db.activitiesMaster.map((a) => (
                   <tr key={a.id}>
                     <td><b>{a.name}</b></td>
-                    <td>{a.storageType ? <span className={'badge ' + (a.storageType === 'inbound' ? 'badge-teal' : 'badge-blue')}>{a.storageType.toUpperCase()}</span> : <span className="badge badge-gray">NORMAL</span>}</td>
+                    <td>{a.storageType ? <span className={'badge ' + (a.storageType === 'inbound' ? 'badge-brand' : 'badge-blue')}>{a.storageType.toUpperCase()}</span> : <span className="badge badge-gray">NORMAL</span>}</td>
                     <td>
                       <div className="row" style={{ gap: 5, flexWrap: 'nowrap' }}>
                         <button className="btn btn-sm btn-ghost" onClick={() => open('activity', a)}>Edit</button>

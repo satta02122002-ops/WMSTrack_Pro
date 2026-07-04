@@ -59,7 +59,7 @@ export function StatusBadge({ status }) {
     complete: ['COMPLETE', 'badge-blue'],
     Pending: ['PENDING', 'badge-amber'],
     Done: ['DONE', 'badge-green'],
-    Inbound: ['INBOUND', 'badge-teal'],
+    Inbound: ['INBOUND', 'badge-brand'],
     Outbound: ['OUTBOUND', 'badge-blue'],
     active: ['ACTIVE', 'badge-green'],
     inactive: ['INACTIVE', 'badge-red'],

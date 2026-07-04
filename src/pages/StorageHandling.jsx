@@ -253,7 +253,7 @@ export default function StorageHandling() {
                       <td className="num">{m.truckCount ?? '—'}</td>
                       <td className="num">{m.packageQty ?? '—'}</td>
                       <td>{m.packageUom || '—'}</td>
-                      <td>{m.sourceActivityId ? <span className="badge badge-teal">AUTO</span> : <span className="badge badge-gray">MANUAL</span>}</td>
+                      <td>{m.sourceActivityId ? <span className="badge badge-brand">AUTO</span> : <span className="badge badge-gray">MANUAL</span>}</td>
                       <td>
                         <div className="row" style={{ gap: 5, flexWrap: 'nowrap' }}>
                           <button className="btn btn-sm btn-ghost" onClick={() => setMovModal(m)}>Edit</button>

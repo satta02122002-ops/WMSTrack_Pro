@@ -147,7 +147,7 @@ export default function MonthlyBilling() {
         <div className="card">
           <div className="spread" style={{ marginBottom: 12 }}>
             <div className="row">
-              <span className="badge badge-teal">{lines.length} line(s)</span>
+              <span className="badge badge-brand">{lines.length} line(s)</span>
               {totalsByCurrency.map(([cur, tot]) => (
                 <span key={cur} className="badge badge-blue">GRAND TOTAL: {fmtNum(tot)} {cur}</span>
               ))}
