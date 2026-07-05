@@ -4,8 +4,8 @@
   "postCreateCommand": "npm install",
   "forwardPorts": [5173, 4173],
   "portsAttributes": {
-    "5173": { "label": "WMSTrack Pro (dev)", "onAutoForward": "openBrowser" },
-    "4173": { "label": "WMSTrack Pro (preview)" }
+    "5173": { "label": "WMSTrack Pro (dev)", "onAutoForward": "openBrowser", "visibility": "public" },
+    "4173": { "label": "WMSTrack Pro (preview)", "visibility": "public" }
   },
   "customizations": {
     "vscode": {
