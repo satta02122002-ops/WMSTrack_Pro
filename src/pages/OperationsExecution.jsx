@@ -158,6 +158,7 @@ export default function OperationsExecution() {
   const [customerRef, setCustomerRef] = useState('')
   const [type, setType] = useState('')
   const [endOpen, setEndOpen] = useState(false)
+  const [fromPending, setFromPending] = useState(false)
 
   // Prefill hand-off from Pending Activity
   useEffect(() => {
@@ -165,6 +166,7 @@ export default function OperationsExecution() {
       setCustomerName(prefill.customerName || '')
       setCustomerRef(prefill.customerRef || '')
       setType('')
+      setFromPending(true)
       setPrefill(null)
       toast(`Form pre-filled from pending job: ${prefill.customerName} (${prefill.customerRef})`, 'info')
     }
@@ -180,7 +182,7 @@ export default function OperationsExecution() {
 
   function handleStart() {
     startActivity({ customerName, customerRef: customerRef.trim(), type })
-    setCustomerName(''); setCustomerRef(''); setType('')
+    setCustomerName(''); setCustomerRef(''); setType(''); setFromPending(false)
   }
 
   const master = myActiveActivity && db.activitiesMaster.find((a) => a.name === myActiveActivity.type)
@@ -235,14 +237,21 @@ export default function OperationsExecution() {
         </div>
       ) : (
         <div className="card">
-          <div className="card-title">▶️ Start New Activity</div>
+          <div className="card-title">▶️ Start New Activity {fromPending && <span className="badge badge-brand" style={{ marginLeft: 8, fontSize: 11 }}>From Pending Job</span>}</div>
+          {fromPending && (
+            <p style={{ color: 'var(--ink-400)', fontSize: 13, marginBottom: 8 }}>
+              Customer and reference are locked to the forwarded job.{' '}
+              <button className="btn-link" style={{ fontSize: 13 }} onClick={() => { setFromPending(false); setCustomerName(''); setCustomerRef(''); setType('') }}>Clear</button>
+            </p>
+          )}
           <div className="form-grid">
             <Field label="Customer Name" required>
               <Select
                 value={customerName}
-                onChange={(v) => { setCustomerName(v); setCustomerRef('') }}
+                onChange={(v) => { setCustomerName(v); setCustomerRef(''); setFromPending(false) }}
                 options={db.customers.map((c) => c.name)}
                 placeholder="Select customer…"
+                disabled={fromPending}
               />
             </Field>
             <Field label="Customer Reference No" required>
@@ -252,7 +261,8 @@ export default function OperationsExecution() {
                 value={customerRef}
                 onChange={(e) => setCustomerRef(e.target.value)}
                 placeholder="e.g. PO-1001"
-                disabled={!customerName}
+                disabled={!customerName || fromPending}
+                readOnly={fromPending}
               />
               <datalist id="ref-options">
                 {(customer?.references || []).map((r) => <option key={r} value={r} />)}

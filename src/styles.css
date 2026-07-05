@@ -145,6 +145,8 @@ a { color: var(--brand-700); }
 .btn-danger:hover:not(:disabled) { background: #b91c1c; }
 .btn-warn { background: var(--amber-600); color: #fff; }
 .btn-warn:hover:not(:disabled) { background: #b45309; }
+.btn-link { background: none; border: none; color: var(--brand-700); cursor: pointer; padding: 0; text-decoration: underline; }
+.btn-link:hover { color: var(--brand-900); }
 .btn-sm { padding: 5px 10px; font-size: 12.5px; border-radius: 7px; }
 .btn-header {
   background: rgba(255,255,255,0.14); color: #fff; border: 1px solid rgba(255,255,255,0.3);
