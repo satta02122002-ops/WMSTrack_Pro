@@ -68,7 +68,7 @@ For a selected month, lines come from four sources:
 
 | Source | Line | Amount |
 |--------|------|--------|
-| Completed normal activities | activity name | qty × unit value (customer + activity + UOM) |
+| Completed normal activities | activity name | qty × unit value (customer + activity + UOM). One job can carry **multiple UOM lines** (e.g. 1 PLT + 10 CTN + 600 PCS entered in the End Activity modal) — each line becomes its own billing charge at that UOM's rate |
 | Unit values with a monthly minimum | *Monthly Minimum Adjustment* | top-up when the group's month total is below the configured minimum (only if the group had activity that month) |
 | Storage movements | Storage In / Storage Out | storage days × CBM × storage rate. Storage days default to the days remaining in the movement's month (editable per movement) |
 | Storage movements with handling | Handling In/Out Container / Trailer / Loose | Container/Trailer: trucks × rate (by vehicle size); Loose: CBM × rate. Customers flagged **"Bill all handling by CBM"** in their handling configuration are always charged CBM × loose rate — even for container/trailer movements (flagged CBM RATE in the billing table). A per-movement minimum charge applies, plus an optional monthly minimum top-up per customer |

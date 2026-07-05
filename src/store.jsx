@@ -73,6 +73,8 @@ function seedDb() {
   const unitValues = []
   const uvSeed = [
     ['Acme Trading Co', 'Picking', 'CTN', 0.45, 'USD', 500],
+    ['Acme Trading Co', 'Picking', 'PLT', 4.5, 'USD', 0],
+    ['Acme Trading Co', 'Picking', 'PCS', 0.05, 'USD', 0],
     ['Acme Trading Co', 'Packing', 'CTN', 0.55, 'USD', 0],
     ['Acme Trading Co', 'Labeling', 'PCS', 0.08, 'USD', 0],
     ['Acme Trading Co', 'Sorting', 'CTN', 0.3, 'USD', 0],

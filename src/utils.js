@@ -109,6 +109,15 @@ export function activityDuration(act, nowMs = Date.now()) {
   return Math.round(secs)
 }
 
+/** Human-readable quantity for an activity: "600 PCS" or "1 PLT + 10 CTN + 600 PCS". */
+export function qtyDisplay(a) {
+  if (Array.isArray(a.qtyLines) && a.qtyLines.length > 1) {
+    return a.qtyLines.map((l) => `${l.qty} ${l.uom}`).join(' + ')
+  }
+  if (a.qty == null || a.qty === '') return '—'
+  return `${a.qty}${a.uom ? ' ' + a.uom : ''}`
+}
+
 // ---- Misc ---------------------------------------------------------------
 
 export function classNames(...parts) {

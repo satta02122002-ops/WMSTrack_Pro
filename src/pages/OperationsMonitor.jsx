@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { StatusBadge, EmptyState, Select } from '../components/ui.jsx'
-import { activityDuration, fmtDuration, fmtDate, fmtTime, todayISO } from '../utils.js'
+import { activityDuration, fmtDuration, fmtDate, fmtTime, todayISO, qtyDisplay } from '../utils.js'
 import { exportXlsx } from '../excel.js'
 
 export default function OperationsMonitor() {
@@ -29,7 +29,7 @@ export default function OperationsMonitor() {
         Date: a.date, Customer: a.customerName, Reference: a.customerRef, Activity: a.type,
         Owner: a.ownerName, Participants: (a.participants || []).map((p) => p.name).join(', '),
         Start: fmtTime(a.startTime), End: fmtTime(a.endTime), Duration: fmtDuration(a.durationSeconds),
-        Qty: a.qty ?? '', UOM: a.uom ?? '', CBM: a.cbm ?? '', Handling: a.handlingMode ?? '',
+        Qty: qtyDisplay(a), UOM: a.qtyLines?.length > 1 ? 'Multi' : a.uom ?? '', CBM: a.cbm ?? '', Handling: a.handlingMode ?? '',
         Outcome: a.outcome ?? '',
       })),
       'Operations History',
@@ -104,8 +104,8 @@ export default function OperationsMonitor() {
                     <td>{a.customerRef}</td>
                     <td>{a.ownerName}</td>
                     <td className="num">{fmtDuration(a.durationSeconds)}</td>
-                    <td className="num">{a.qty ?? '—'}</td>
-                    <td>{a.uom ?? '—'}</td>
+                    <td className="num" style={{ whiteSpace: 'nowrap' }}>{qtyDisplay(a)}</td>
+                    <td>{a.qtyLines?.length > 1 ? <span className="badge badge-blue">MULTI</span> : a.uom ?? '—'}</td>
                     <td className="num">{a.cbm ?? '—'}</td>
                     <td>{a.handlingMode ? `${a.handlingMode}${a.vehicleType ? ' ' + a.vehicleType : ''}` : '—'}</td>
                     <td><StatusBadge status={a.outcome} /></td>

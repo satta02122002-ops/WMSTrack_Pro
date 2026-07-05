@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Select, EmptyState, StatusBadge } from '../components/ui.jsx'
-import { fmtDate, fmtDuration, fmtNum, num, round2, todayISO, toISODate } from '../utils.js'
+import { fmtDate, fmtDuration, fmtNum, num, round2, todayISO, toISODate, qtyDisplay } from '../utils.js'
 import { exportXlsx, exportCsv } from '../excel.js'
 import { computeBillingLines } from '../billing.js'
 import { monthKey } from '../utils.js'
@@ -53,7 +53,7 @@ export default function Reports() {
     operations: () =>
       operations.map((a) => ({
         Date: a.date, Customer: a.customerName, Reference: a.customerRef, Activity: a.type, Owner: a.ownerName,
-        Duration: fmtDuration(a.durationSeconds), Qty: a.qty ?? '', UOM: a.uom ?? '', CBM: a.cbm ?? '', Outcome: a.outcome ?? '',
+        Duration: fmtDuration(a.durationSeconds), Qty: qtyDisplay(a), UOM: a.qtyLines?.length > 1 ? 'Multi' : a.uom ?? '', CBM: a.cbm ?? '', Outcome: a.outcome ?? '',
       })),
     storage: () =>
       movements.map((m) => ({
@@ -118,7 +118,7 @@ export default function Reports() {
                   {operations.map((a) => (
                     <tr key={a.id}>
                       <td>{fmtDate(a.date)}</td><td><b>{a.customerName}</b></td><td>{a.customerRef}</td><td>{a.type}</td><td>{a.ownerName}</td>
-                      <td className="num">{fmtDuration(a.durationSeconds)}</td><td className="num">{a.qty ?? '—'}</td><td>{a.uom ?? '—'}</td>
+                      <td className="num">{fmtDuration(a.durationSeconds)}</td><td className="num" style={{ whiteSpace: 'nowrap' }}>{qtyDisplay(a)}</td><td>{a.qtyLines?.length > 1 ? <span className="badge badge-blue">MULTI</span> : a.uom ?? '—'}</td>
                       <td className="num">{a.cbm ?? '—'}</td><td><StatusBadge status={a.outcome} /></td>
                     </tr>
                   ))}

@@ -23,22 +23,29 @@ export function computeBillingLines(db, period) {
   )
   const groupTotals = new Map() // `${customer}|${activity}|${uom}` -> total
   for (const a of acts) {
-    const uv = db.unitValues.find(
-      (v) => v.customer === a.customerName && v.activity === a.type && (!a.uom || v.uom === a.uom),
-    )
-    const rate = uv ? num(uv.unitRate) : 0
-    const total = round2(num(a.qty) * rate)
-    const gkey = `${a.customerName}|${a.type}|${a.uom || uv?.uom || ''}`
-    groupTotals.set(gkey, round2((groupTotals.get(gkey) || 0) + total))
-    lines.push({
-      id: `act:${a.id}`,
-      source: 'activity', reportType: 'Activities',
-      customerName: a.customerName, date: a.date, customerRef: a.customerRef,
-      activity: a.type, handlingType: '', vehicleType: '', truckCount: '',
-      cbmQty: '', packageQty: a.qty, packageUom: a.uom || '',
-      currency: uv?.currency || customerCurrency(a.customerName),
-      combinedRate: rate, totalValue: total,
-      rateMissing: !uv,
+    // A job may be chargeable in several UOMs at once (qtyLines); older records
+    // carry a single qty/uom pair. Each line bills against its own unit value.
+    const qLines =
+      Array.isArray(a.qtyLines) && a.qtyLines.length ? a.qtyLines : [{ qty: a.qty, uom: a.uom }]
+    qLines.forEach((ql, idx) => {
+      const uv = db.unitValues.find(
+        (v) => v.customer === a.customerName && v.activity === a.type && (!ql.uom || v.uom === ql.uom),
+      )
+      const rate = uv ? num(uv.unitRate) : 0
+      const total = round2(num(ql.qty) * rate)
+      const gkey = `${a.customerName}|${a.type}|${ql.uom || uv?.uom || ''}`
+      groupTotals.set(gkey, round2((groupTotals.get(gkey) || 0) + total))
+      lines.push({
+        // first line keeps the legacy id so existing billed records stay billed
+        id: idx === 0 ? `act:${a.id}` : `act:${a.id}:${idx}`,
+        source: 'activity', reportType: 'Activities',
+        customerName: a.customerName, date: a.date, customerRef: a.customerRef,
+        activity: a.type, handlingType: '', vehicleType: '', truckCount: '',
+        cbmQty: '', packageQty: ql.qty, packageUom: ql.uom || '',
+        currency: uv?.currency || customerCurrency(a.customerName),
+        combinedRate: rate, totalValue: total,
+        rateMissing: !uv,
+      })
     })
   }
 
