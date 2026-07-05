@@ -299,10 +299,17 @@ table.data tfoot td { font-weight: 700; background: var(--ink-50); border-top: 2
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
   background: linear-gradient(135deg, var(--brand-900) 0%, var(--brand-700) 55%, var(--brand-500) 100%);
   padding: 20px;
+  position: relative; overflow: hidden;
+}
+.login-backdrop {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  width: 100%; height: min(52vh, 430px);
+  pointer-events: none; user-select: none;
 }
 .login-card {
   background: var(--white); border-radius: 16px; box-shadow: var(--shadow-lg);
   width: 100%; max-width: 400px; padding: 34px 32px;
+  position: relative; z-index: 1;
 }
 .login-logo {
   display: flex; align-items: center; justify-content: center;

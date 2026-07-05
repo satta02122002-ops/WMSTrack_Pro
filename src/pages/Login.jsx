@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useStore, REMEMBER_KEY } from '../store.jsx'
 import { Field } from '../components/ui.jsx'
 import Logo from '../components/Logo.jsx'
+import WarehouseBackdrop from '../components/WarehouseBackdrop.jsx'
 
 export default function Login() {
   const { login } = useStore()
@@ -29,6 +30,7 @@ export default function Login() {
 
   return (
     <div className="login-wrap">
+      <WarehouseBackdrop />
       <form className="login-card" onSubmit={submit}>
         <div className="login-logo">
           <Logo size={74} />
