@@ -1,8 +1,207 @@
 import React, { useEffect, useState } from 'react'
 import { useStore } from '../store.jsx'
-import { StatusBadge, EmptyState, Select } from '../components/ui.jsx'
-import { activityDuration, fmtDuration, fmtDate, fmtTime, todayISO, qtyDisplay } from '../utils.js'
+import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
+import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
+import { activityDuration, fmtDuration, fmtDate, fmtTime, todayISO, nowISO, uid, num, qtyDisplay } from '../utils.js'
 import { exportXlsx } from '../excel.js'
+
+function ManualActivityModal({ onClose }) {
+  const { db, update, toast, session } = useStore()
+  const [customerName, setCustomerName] = useState('')
+  const [customerRef, setCustomerRef] = useState('')
+  const [type, setType] = useState('')
+  const [date, setDate] = useState(todayISO())
+  const [durationMin, setDurationMin] = useState('')
+  const [qtyLines, setQtyLines] = useState([{ qty: '', uom: '' }])
+
+  // Storage fields
+  const [cbm, setCbm] = useState('')
+  const [storageTypeUsed, setStorageTypeUsed] = useState('')
+  const [handlingMode, setHandlingMode] = useState('')
+  const [vehicleType, setVehicleType] = useState('')
+  const [truckCount, setTruckCount] = useState('1')
+  const [pkgLines, setPkgLines] = useState([{ qty: '', uom: '' }])
+
+  const master = db.activitiesMaster.find((a) => a.name === type)
+  const isStorage = master?.storageType === 'inbound' || master?.storageType === 'outbound'
+  const needsVehicle = handlingMode === 'Container' || handlingMode === 'Trailer'
+  const storageTypes = [...new Set(db.storageRates.map((r) => r.storageType))]
+  const customer = db.customers.find((c) => c.name === customerName)
+
+  const valid = customerName && customerRef.trim() && type && date && num(durationMin) > 0 && (
+    isStorage
+      ? num(cbm) > 0 && storageTypeUsed && handlingMode && validQtyLines(pkgLines) &&
+        (handlingMode === 'Loose' || (vehicleType && num(truckCount) > 0))
+      : validQtyLines(qtyLines)
+  )
+
+  function save() {
+    const durationSeconds = Math.round(num(durationMin) * 60)
+    const now = nowISO()
+    const ownerName = session?.name || 'Manual Entry'
+
+    let actPayload
+    if (isStorage) {
+      const cleanPkgs = pkgLines.map((l) => ({ qty: num(l.qty), uom: l.uom }))
+      actPayload = {
+        cbm: num(cbm), storageTypeUsed, handlingMode,
+        vehicleType: needsVehicle ? vehicleType : null,
+        truckCount: needsVehicle ? num(truckCount) : null,
+        packageLines: cleanPkgs,
+        packageQty: qtyLinesTotal(cleanPkgs),
+        packageUom: cleanPkgs.length === 1 ? cleanPkgs[0].uom : null,
+        qty: null, uom: null, qtyLines: null,
+      }
+    } else {
+      const cleanLines = qtyLines.map((l) => ({ qty: num(l.qty), uom: l.uom }))
+      actPayload = {
+        qtyLines: cleanLines,
+        qty: qtyLinesTotal(cleanLines),
+        uom: cleanLines.length === 1 ? cleanLines[0].uom : null,
+        cbm: null, storageTypeUsed: null, handlingMode: null,
+        vehicleType: null, truckCount: null, packageLines: null, packageQty: null, packageUom: null,
+      }
+    }
+
+    const actId = uid('op')
+    const act = {
+      id: actId, customerName, customerRef: customerRef.trim(), date,
+      type, storageType: master?.storageType || null, status: 'complete',
+      startTime: now, endTime: now,
+      accumulatedSeconds: durationSeconds, lastResumeTime: null, durationSeconds,
+      owner: session?.userId || 'manual', ownerName, participants: [],
+      outcome: 'finished',
+      ...actPayload,
+    }
+
+    update((d) => {
+      let next = {
+        ...d,
+        operationsActivities: [act, ...d.operationsActivities],
+        auditLog: [
+          { id: uid('log'), dateTime: now, user: ownerName, action: 'Manual Entry', entityType: 'Operations', details: `Manual entry: ${type} for ${customerName} (${customerRef.trim()})` },
+          ...d.auditLog,
+        ].slice(0, 5000),
+      }
+
+      if (isStorage) {
+        const mov = {
+          id: uid('mov'), customer: customerName, date, reference: customerRef.trim(),
+          type: master.storageType === 'inbound' ? 'Inbound' : 'Outbound',
+          cbm: num(cbm), storage: storageTypeUsed,
+          handlingMode: handlingMode || null,
+          containerSize: needsVehicle ? vehicleType : null,
+          truckCount: needsVehicle ? num(truckCount) : null,
+          packageQty: actPayload.packageQty, packageUom: actPayload.packageUom,
+          packageLines: actPayload.packageLines,
+          storageDays: null, sourceActivityId: actId,
+        }
+        next = {
+          ...next,
+          storageMovements: [mov, ...next.storageMovements],
+          auditLog: [
+            { id: uid('log'), dateTime: now, user: ownerName, action: 'Storage Movement', entityType: 'Storage', details: `${mov.type} movement auto-created (manual): ${mov.cbm} CBM for ${mov.customer} (${mov.reference})` },
+            ...next.auditLog,
+          ].slice(0, 5000),
+        }
+      }
+
+      return next
+    })
+
+    toast('Activity recorded (manual entry)')
+    onClose()
+  }
+
+  return (
+    <Modal
+      title="Manual Activity Entry"
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={!valid} onClick={save}>Save Activity</button>
+        </>
+      }
+    >
+      <div className="form-grid">
+        <Field label="Customer Name" required>
+          <Select value={customerName} onChange={(v) => { setCustomerName(v); setCustomerRef('') }} options={db.customers.map((c) => c.name)} placeholder="Select…" />
+        </Field>
+        <Field label="Customer Reference" required>
+          <input type="text" list="manual-ref-opts" value={customerRef} onChange={(e) => setCustomerRef(e.target.value)} placeholder="e.g. PO-1001" disabled={!customerName} />
+          <datalist id="manual-ref-opts">
+            {(customer?.references || []).map((r) => <option key={r} value={r} />)}
+          </datalist>
+        </Field>
+        <Field label="Activity Type" required>
+          <Select
+            value={type}
+            onChange={(v) => { setType(v); setStorageTypeUsed(''); setHandlingMode('') }}
+            options={db.activitiesMaster.map((a) => ({ value: a.name, label: a.name + (a.storageType ? ` (${a.storageType})` : '') }))}
+            placeholder="Select…"
+          />
+        </Field>
+        <Field label="Date" required>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </Field>
+        <Field label="Duration (minutes)" required>
+          <input type="number" min="1" step="1" value={durationMin} onChange={(e) => setDurationMin(e.target.value)} placeholder="e.g. 45" />
+        </Field>
+      </div>
+
+      {type && !isStorage && (
+        <>
+          <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink-700)', textTransform: 'uppercase', letterSpacing: 0.4, margin: '12px 0 8px' }}>
+            Chargeable Quantities — one line per UOM
+          </p>
+          <QtyLinesEditor lines={qtyLines} onChange={setQtyLines} uoms={db.uoms.map((u) => u.name)} />
+        </>
+      )}
+
+      {type && isStorage && (
+        <>
+          <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink-700)', textTransform: 'uppercase', letterSpacing: 0.4, margin: '12px 0 8px' }}>
+            Storage &amp; Handling Details
+          </p>
+          <div className="form-grid">
+            <Field label="CBM" required>
+              <input type="number" min="0" step="0.01" value={cbm} onChange={(e) => setCbm(e.target.value)} />
+            </Field>
+            <Field label="Storage Type" required>
+              <Select value={storageTypeUsed} onChange={setStorageTypeUsed} options={storageTypes} placeholder="Select…" />
+            </Field>
+            <Field label="Handling Mode" required>
+              <Select value={handlingMode} onChange={setHandlingMode} options={['Container', 'Trailer', 'Loose']} placeholder="Select…" />
+            </Field>
+            {needsVehicle && (
+              <>
+                <Field label="Vehicle Type" required>
+                  <Select value={vehicleType} onChange={setVehicleType} options={db.vehicleTypes.map((v) => v.name)} placeholder="Select…" />
+                </Field>
+                <Field label="No. of Trucks" required>
+                  <input type="number" min="1" value={truckCount} onChange={(e) => setTruckCount(e.target.value)} />
+                </Field>
+              </>
+            )}
+          </div>
+          <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink-700)', textTransform: 'uppercase', letterSpacing: 0.4, margin: '12px 0 8px' }}>
+            Packages — one line per UOM
+          </p>
+          <QtyLinesEditor
+            lines={pkgLines}
+            onChange={setPkgLines}
+            uoms={db.uoms.map((u) => u.name)}
+            qtyLabel="Package Qty"
+            uomLabel="Package UOM"
+            totalLabel="Total packages"
+          />
+        </>
+      )}
+    </Modal>
+  )
+}
 
 export default function OperationsMonitor() {
   const { db } = useStore()
@@ -15,6 +214,7 @@ export default function OperationsMonitor() {
   const [from, setFrom] = useState(todayISO())
   const [to, setTo] = useState(todayISO())
   const [customer, setCustomer] = useState('')
+  const [manualOpen, setManualOpen] = useState(false)
 
   const live = db.operationsActivities.filter((a) => a.status !== 'complete')
   const history = db.operationsActivities
@@ -80,6 +280,7 @@ export default function OperationsMonitor() {
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
             <Select value={customer} onChange={setCustomer} options={db.customers.map((c) => c.name)} placeholder="All customers" style={{ width: 180 }} />
+            <button className="btn btn-primary btn-sm" onClick={() => setManualOpen(true)}>+ Manual Entry</button>
             <button className="btn btn-outline btn-sm" onClick={exportHistory} disabled={!history.length}>⬇ Excel</button>
           </div>
         </div>
@@ -116,6 +317,8 @@ export default function OperationsMonitor() {
           </div>
         )}
       </div>
+
+      {manualOpen && <ManualActivityModal onClose={() => setManualOpen(false)} />}
     </div>
   )
 }
