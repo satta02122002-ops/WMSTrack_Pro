@@ -29,7 +29,7 @@ export const ROLES = ['Developer', 'Admin', 'Supervisor', 'User']
 export const ROLE_PAGES = {
   Developer: PAGES.map((p) => p.key),
   Admin: PAGES.map((p) => p.key).filter((k) => k !== 'users'),
-  Supervisor: ['operations', 'pending', 'storage', 'reports'],
+  Supervisor: ['operations', 'pending', 'monitor', 'storage', 'reports'],
   User: ['operations', 'pending'],
 }
 
@@ -47,6 +47,7 @@ export function pagesForUser(user) {
 const H = {
   developer: '88fa0d759f845b47c044c2cd44e29082cf6fea665c30c146374ec7c8f3d699e3',
   admin: '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918',
+  supervisor: '0834c2d60725ac5902257b3b78dd161ad26d1c0290dbf1e47cc14add5b8c8142',
   user: '04f8996da763b7a969b1028ee3007569eaf3a635486ddab211d512c85b9df8fb',
 }
 
@@ -112,6 +113,7 @@ function seedDb() {
   const users = [
     { id: uid('usr'), name: 'System Developer', userId: 'developer', passwordHash: H.developer, role: 'Developer', active: true, allowedPages: null },
     { id: uid('usr'), name: 'Warehouse Admin', userId: 'admin', passwordHash: H.admin, role: 'Admin', active: true, allowedPages: null },
+    { id: uid('usr'), name: 'Warehouse Supervisor', userId: 'supervisor', passwordHash: H.supervisor, role: 'Supervisor', active: true, allowedPages: null },
     { id: uid('usr'), name: 'Warehouse Operator', userId: 'user', passwordHash: H.user, role: 'User', active: true, allowedPages: null },
   ]
 

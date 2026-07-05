@@ -17,13 +17,14 @@ On first run the app seeds a demo database: default users, 3 customers, 8 activi
 
 ### Default users
 
-| Role      | User ID     | Password    | Access |
-|-----------|-------------|-------------|--------|
-| Developer | `developer` | `developer` | Everything, including User & Authorization; exempt from the daily check-in gate |
-| Admin     | `admin`     | `admin`     | All modules except User management |
-| User      | `user`      | `user`      | Operations Execution and Pending Activity only |
+| Role       | User ID      | Password     | Access |
+|------------|--------------|--------------|--------|
+| Developer  | `developer`  | `developer`  | Everything, including User & Authorization; exempt from the daily check-in gate |
+| Admin      | `admin`      | `admin`      | All modules except User management |
+| Supervisor | `supervisor` | `supervisor` | Operations Execution, Pending Activity, Operations Monitor (with manual entry), Storage & Handling (with manual entry), and Reports |
+| User       | `user`       | `user`       | Operations Execution and Pending Activity only |
 
-A **Supervisor** role (Operations, Pending Activity, Storage & Handling, Reports) can be assigned from User & Authorization, and any user can be given custom per-page access.
+Any user can be given custom per-page access from User & Authorization.
 
 Login is case-insensitive on User ID, shows generic error messages, supports "Remember User ID" and a show/hide password toggle. Inactive users cannot log in. Passwords are stored as SHA-256 hashes.
 
