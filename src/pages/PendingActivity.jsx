@@ -1,14 +1,21 @@
 import React, { useState } from 'react'
 import { useStore } from '../store.jsx'
-import { StatusBadge, EmptyState, Select } from '../components/ui.jsx'
+import { StatusBadge, EmptyState, Select, Field } from '../components/ui.jsx'
 import { fmtDate } from '../utils.js'
 
 export default function PendingActivity({ setPage }) {
   const { db, setPrefill, myActiveActivity, needsCheckIn } = useStore()
   const [statusFilter, setStatusFilter] = useState('Pending')
+  const [customerFilter, setCustomerFilter] = useState('')
+  const [activityFilter, setActivityFilter] = useState('')
 
   const rows = db.pendingAssignments
-    .filter((p) => !statusFilter || p.status === statusFilter)
+    .filter((p) => {
+      if (statusFilter && p.status !== statusFilter) return false
+      if (customerFilter && p.customerName !== customerFilter) return false
+      if (activityFilter && p.lastActivityName !== activityFilter) return false
+      return true
+    })
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
 
   function startFromPending(p) {
@@ -22,10 +29,18 @@ export default function PendingActivity({ setPage }) {
       <p className="page-sub">Queue of forwarded customer jobs waiting for the next activity.</p>
 
       <div className="card">
+        <div className="form-grid" style={{ marginBottom: 12 }}>
+          <Field label="Status">
+            <Select value={statusFilter} onChange={setStatusFilter} options={['Pending', 'Done']} placeholder="All statuses" />
+          </Field>
+          <Field label="Customer">
+            <Select value={customerFilter} onChange={setCustomerFilter} options={db.customers.map((c) => c.name)} placeholder="All customers" />
+          </Field>
+          <Field label="Activity">
+            <Select value={activityFilter} onChange={setActivityFilter} options={db.activitiesMaster.map((a) => a.name)} placeholder="All activities" />
+          </Field>
+        </div>
         <div className="spread" style={{ marginBottom: 12 }}>
-          <div className="row">
-            <Select value={statusFilter} onChange={setStatusFilter} options={['Pending', 'Done']} placeholder="All statuses" style={{ width: 160 }} />
-          </div>
           <span className="badge badge-brand">{rows.length} row(s)</span>
         </div>
 

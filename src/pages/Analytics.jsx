@@ -5,7 +5,7 @@ import {
 } from 'chart.js'
 import { Bar, Line, Pie, Doughnut, Bubble, Radar } from 'react-chartjs-2'
 import { useStore } from '../store.jsx'
-import { KPI, EmptyState } from '../components/ui.jsx'
+import { KPI, EmptyState, Select, Field } from '../components/ui.jsx'
 import { fmtNum, num, round2, todayISO, toISODate, monthKey } from '../utils.js'
 import { computeBillingLines } from '../billing.js'
 
@@ -40,17 +40,33 @@ export default function Analytics() {
   const { db } = useStore()
   const [from, setFrom] = useState(daysAgo(30))
   const [to, setTo] = useState(todayISO())
+  const [customerFilter, setCustomerFilter] = useState('')
+  const [activityFilter, setActivityFilter] = useState('')
 
   const data = useMemo(() => {
     const inRange = (d) => (!from || d >= from) && (!to || d <= to)
-    const acts = db.operationsActivities.filter((a) => a.status === 'complete' && inRange(a.date))
-    const movements = db.storageMovements.filter((m) => inRange(m.date))
+    const acts = db.operationsActivities.filter((a) => {
+      if (a.status !== 'complete' || !inRange(a.date)) return false
+      if (customerFilter && a.customerName !== customerFilter) return false
+      if (activityFilter && a.type !== activityFilter) return false
+      return true
+    })
+    const movements = db.storageMovements.filter((m) => {
+      if (!inRange(m.date)) return false
+      if (customerFilter && m.customer !== customerFilter) return false
+      return true
+    })
     const attendance = db.attendance.filter((a) => inRange(a.date))
 
     // revenue via billing engine across the months the range touches
     const periods = new Set([...acts.map((a) => monthKey(a.date)), ...movements.map((m) => monthKey(m.date)), ...db.vasCharges.filter((v) => inRange(v.date)).map((v) => monthKey(v.date))])
     const billLines = []
-    for (const p of periods) billLines.push(...computeBillingLines(db, p).filter((l) => inRange(l.date)))
+    for (const p of periods) billLines.push(...computeBillingLines(db, p).filter((l) => {
+      if (!inRange(l.date)) return false
+      if (customerFilter && l.customerName !== customerFilter) return false
+      if (activityFilter && l.source === 'activity' && l.activity !== activityFilter) return false
+      return true
+    }))
 
     // stable entity order from master data
     const typeOrder = db.activitiesMaster.map((a) => a.name).filter((n) => acts.some((a) => a.type === n))
@@ -138,7 +154,7 @@ export default function Analytics() {
         activeUsers: new Set(attendance.map((a) => a.userId)).size,
       },
     }
-  }, [db, from, to])
+  }, [db, from, to, customerFilter, activityFilter])
 
   const k = data.kpis
   const typeLabels = [...data.byType.keys()]
@@ -151,9 +167,11 @@ export default function Analytics() {
         <h1 className="page-title">Performance Analytics</h1>
         <p className="page-sub">KPIs and operational charts.</p>
         <div className="card">
-          <div className="row" style={{ marginBottom: 10 }}>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          <div className="form-grid" style={{ marginBottom: 10 }}>
+            <Field label="From"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+            <Field label="To"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
+            <Field label="Customer"><Select value={customerFilter} onChange={setCustomerFilter} options={db.customers.map((c) => c.name)} placeholder="All customers" /></Field>
+            <Field label="Activity"><Select value={activityFilter} onChange={setActivityFilter} options={db.activitiesMaster.map((a) => a.name)} placeholder="All activities" /></Field>
           </div>
           <EmptyState icon="📊" title="No data in this date range" hint="Complete some activities or widen the range." />
         </div>
@@ -169,10 +187,11 @@ export default function Analytics() {
       <p className="page-sub">Warehouse KPIs and operational charts. Revenue combines all currencies at face value.</p>
 
       <div className="card" style={{ padding: 12 }}>
-        <div className="row">
-          <b style={{ fontSize: 13 }}>Date range:</b>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        <div className="form-grid">
+          <Field label="From"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+          <Field label="To"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
+          <Field label="Customer"><Select value={customerFilter} onChange={setCustomerFilter} options={db.customers.map((c) => c.name)} placeholder="All customers" /></Field>
+          <Field label="Activity"><Select value={activityFilter} onChange={setActivityFilter} options={db.activitiesMaster.map((a) => a.name)} placeholder="All activities" /></Field>
         </div>
       </div>
 
