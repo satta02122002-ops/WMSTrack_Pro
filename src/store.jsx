@@ -651,6 +651,26 @@ export function StoreProvider({ children }) {
     [update, logEntry, session, toast],
   )
 
+  const unbillRecords = useCallback(
+    (lineIds) => {
+      if (!lineIds.length) return
+      const idsToRemove = new Set(lineIds)
+      update((d) =>
+        logEntry(session?.name || 'system', 'Unbill', 'Billing', `Reversed billing on ${lineIds.length} line(s)`)({
+          ...d,
+          billedRecords: d.billedRecords
+            .map((r) => {
+              const remaining = r.lineIds.filter((lid) => !idsToRemove.has(lid))
+              return remaining.length ? { ...r, lineIds: remaining } : null
+            })
+            .filter(Boolean),
+        }),
+      )
+      toast(`${lineIds.length} line(s) reverted to unbilled`)
+    },
+    [update, logEntry, session, toast],
+  )
+
   /** Map of billed line id -> {billedBy, billedDate} */
   const billedMap = useMemo(() => {
     const m = new Map()
@@ -671,7 +691,7 @@ export function StoreProvider({ children }) {
     session, currentUser, login, logout, changePassword,
     isCheckedIn, needsCheckIn, todayAttendance, checkIn, checkOut,
     myActiveActivity, startActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, endActivity,
-    recordBilling, billedMap,
+    recordBilling, unbillRecords, billedMap,
     logAction, toast, toasts,
     prefill, setPrefill,
     pagesForUser, resetDb,

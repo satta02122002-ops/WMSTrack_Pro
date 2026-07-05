@@ -6,7 +6,7 @@ import { computeBillingLines } from '../billing.js'
 import { exportXlsx } from '../excel.js'
 
 export default function MonthlyBilling() {
-  const { db, billedMap, recordBilling, update, toast, session } = useStore()
+  const { db, billedMap, recordBilling, unbillRecords, update, toast, session } = useStore()
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
@@ -16,6 +16,7 @@ export default function MonthlyBilling() {
   const [generated, setGenerated] = useState(false)
   const [selected, setSelected] = useState(() => new Set())
   const [billModal, setBillModal] = useState(false)
+  const [unbillModal, setUnbillModal] = useState(false)
   const [billDate, setBillDate] = useState(todayISO())
   const [apiUrl, setApiUrl] = useState(db.settings?.billingApiUrl || '')
   const [submitting, setSubmitting] = useState(false)
@@ -43,11 +44,14 @@ export default function MonthlyBilling() {
     return [...m.entries()]
   }, [lines])
 
-  const selectableIds = lines.filter((l) => !billedMap.get(l.id)).map((l) => l.id)
-  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selected.has(id))
+  const selectedBilled = lines.filter((l) => selected.has(l.id) && billedMap.get(l.id))
+  const selectedUnbilled = lines.filter((l) => selected.has(l.id) && !billedMap.get(l.id))
+
+  const allIds = lines.map((l) => l.id)
+  const allSelected = allIds.length > 0 && allIds.every((id) => selected.has(id))
 
   function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(selectableIds))
+    setSelected(allSelected ? new Set() : new Set(allIds))
   }
   function toggle(id) {
     setSelected((s) => {
@@ -63,9 +67,15 @@ export default function MonthlyBilling() {
   }
 
   function confirmBilling() {
-    recordBilling(period, [...selected], billDate)
+    recordBilling(period, selectedUnbilled.map((l) => l.id), billDate)
     setSelected(new Set())
     setBillModal(false)
+  }
+
+  function confirmUnbill() {
+    unbillRecords(selectedBilled.map((l) => l.id))
+    setSelected(new Set())
+    setUnbillModal(false)
   }
 
   function exportExcel() {
@@ -153,8 +163,11 @@ export default function MonthlyBilling() {
               ))}
             </div>
             <div className="row">
-              <button className="btn btn-sm btn-blue" disabled={selected.size === 0} onClick={() => setBillModal(true)}>
-                💳 Record Billing ({selected.size})
+              <button className="btn btn-sm btn-blue" disabled={selectedUnbilled.length === 0} onClick={() => setBillModal(true)}>
+                💳 Record Billing ({selectedUnbilled.length})
+              </button>
+              <button className="btn btn-sm btn-danger" disabled={selectedBilled.length === 0} onClick={() => setUnbillModal(true)}>
+                ↩ Unbill ({selectedBilled.length})
               </button>
               <button className="btn btn-sm btn-outline" disabled={!lines.length} onClick={exportExcel}>⬇ Export Excel</button>
             </div>
@@ -167,7 +180,7 @@ export default function MonthlyBilling() {
               <table className="data">
                 <thead>
                   <tr>
-                    <th><input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select all unbilled" /></th>
+                    <th><input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select / deselect all" /></th>
                     <th>Customer Name</th><th>Date</th><th>Customer Ref No</th><th>Activity</th>
                     <th>Handling Type</th><th>Vehicle</th><th className="num">Trucks</th>
                     <th className="num">CBM Qty</th><th className="num">Package Qty</th><th>Pkg UOM</th>
@@ -181,7 +194,7 @@ export default function MonthlyBilling() {
                     return (
                       <tr key={l.id} style={billed ? { opacity: 0.72 } : undefined}>
                         <td>
-                          <input type="checkbox" disabled={!!billed} checked={selected.has(l.id)} onChange={() => toggle(l.id)} />
+                          <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} />
                         </td>
                         <td><b>{l.customerName}</b></td>
                         <td>{fmtDate(l.date)}</td>
@@ -249,11 +262,31 @@ export default function MonthlyBilling() {
           }
         >
           <p style={{ marginBottom: 12 }}>
-            Mark <b>{selected.size}</b> line(s) as billed for period <b>{monthName(month)} {year}</b>.
+            Mark <b>{selectedUnbilled.length}</b> line(s) as billed for period <b>{monthName(month)} {year}</b>.
           </p>
           <Field label="Billing date" required>
             <input type="date" value={billDate} onChange={(e) => setBillDate(e.target.value)} />
           </Field>
+        </Modal>
+      )}
+
+      {unbillModal && (
+        <Modal
+          title="Reverse Billing"
+          onClose={() => setUnbillModal(false)}
+          footer={
+            <>
+              <button className="btn btn-ghost" onClick={() => setUnbillModal(false)}>Cancel</button>
+              <button className="btn btn-danger" onClick={confirmUnbill}>Confirm Unbill</button>
+            </>
+          }
+        >
+          <p style={{ marginBottom: 12 }}>
+            Reverse billing on <b>{selectedBilled.length}</b> line(s)? They will return to <b>Not billed</b> status.
+          </p>
+          <p style={{ color: 'var(--ink-400)', fontSize: 13 }}>
+            This action is logged in the audit trail.
+          </p>
         </Modal>
       )}
     </div>
