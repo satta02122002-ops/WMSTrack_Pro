@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
+import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
 import { activityDuration, fmtDuration, fmtTime, num } from '../utils.js'
 
 function useTick(intervalMs = 1000) {
@@ -22,8 +23,8 @@ export function EndActivityModal({ activity, onClose }) {
   const [handlingMode, setHandlingMode] = useState('')
   const [vehicleType, setVehicleType] = useState('')
   const [truckCount, setTruckCount] = useState('1')
-  const [packageQty, setPackageQty] = useState('')
-  const [packageUom, setPackageUom] = useState('')
+  // Offloading/Loading packages can also span several UOMs (recorded on the movement)
+  const [pkgLines, setPkgLines] = useState([{ qty: '', uom: '' }])
 
   const storageTypes = useMemo(() => {
     const fromRates = db.storageRates.filter((r) => r.customer === activity.customerName).map((r) => r.storageType)
@@ -32,37 +33,36 @@ export function EndActivityModal({ activity, onClose }) {
   }, [db.storageRates, activity.customerName])
 
   const needsVehicle = handlingMode === 'Container' || handlingMode === 'Trailer'
-  const uomDuplicated = new Set(qtyLines.map((l) => l.uom).filter(Boolean)).size !== qtyLines.filter((l) => l.uom).length
   const valid = isStorage
     ? num(cbm) > 0 &&
       storageTypeUsed &&
       handlingMode &&
-      (handlingMode === 'Loose'
-        ? packageUom && num(packageQty) > 0
-        : vehicleType && num(truckCount) > 0 && packageUom && num(packageQty) > 0)
-    : qtyLines.length > 0 && qtyLines.every((l) => num(l.qty) > 0 && l.uom) && !uomDuplicated
-
-  const setLine = (idx, key, value) =>
-    setQtyLines((ls) => ls.map((l, i) => (i === idx ? { ...l, [key]: value } : l)))
-  const addLine = () => setQtyLines((ls) => [...ls, { qty: '', uom: '' }])
-  const removeLine = (idx) => setQtyLines((ls) => ls.filter((_, i) => i !== idx))
-  const totalQty = qtyLines.reduce((s, l) => s + num(l.qty), 0)
+      validQtyLines(pkgLines) &&
+      (handlingMode === 'Loose' || (vehicleType && num(truckCount) > 0))
+    : validQtyLines(qtyLines)
 
   function finish(forward) {
-    const cleanLines = qtyLines.map((l) => ({ qty: num(l.qty), uom: l.uom }))
-    const payload = isStorage
-      ? {
-          cbm: num(cbm), storageTypeUsed, handlingMode,
-          vehicleType: needsVehicle ? vehicleType : null,
-          truckCount: needsVehicle ? num(truckCount) : null,
-          packageQty: num(packageQty), packageUom, forward,
-        }
-      : {
-          qtyLines: cleanLines,
-          qty: totalQty,
-          uom: cleanLines.length === 1 ? cleanLines[0].uom : null,
-          forward,
-        }
+    let payload
+    if (isStorage) {
+      const cleanPkgs = pkgLines.map((l) => ({ qty: num(l.qty), uom: l.uom }))
+      payload = {
+        cbm: num(cbm), storageTypeUsed, handlingMode,
+        vehicleType: needsVehicle ? vehicleType : null,
+        truckCount: needsVehicle ? num(truckCount) : null,
+        packageLines: cleanPkgs,
+        packageQty: qtyLinesTotal(cleanPkgs),
+        packageUom: cleanPkgs.length === 1 ? cleanPkgs[0].uom : null,
+        forward,
+      }
+    } else {
+      const cleanLines = qtyLines.map((l) => ({ qty: num(l.qty), uom: l.uom }))
+      payload = {
+        qtyLines: cleanLines,
+        qty: qtyLinesTotal(cleanLines),
+        uom: cleanLines.length === 1 ? cleanLines[0].uom : null,
+        forward,
+      }
+    }
     endActivity(activity.id, payload)
     onClose()
   }
@@ -105,24 +105,29 @@ export function EndActivityModal({ activity, onClose }) {
             </Field>
           </div>
           {handlingMode && (
-            <div className="form-grid">
+            <>
               {needsVehicle && (
-                <>
+                <div className="form-grid">
                   <Field label="Vehicle Type" required>
                     <Select value={vehicleType} onChange={setVehicleType} options={db.vehicleTypes.map((v) => v.name)} placeholder="Select vehicle…" />
                   </Field>
                   <Field label="No. of Trucks" required>
                     <input type="number" min="1" step="1" value={truckCount} onChange={(e) => setTruckCount(e.target.value)} />
                   </Field>
-                </>
+                </div>
               )}
-              <Field label="Package UOM" required>
-                <Select value={packageUom} onChange={setPackageUom} options={db.uoms.map((u) => u.name)} placeholder="Select UOM…" />
-              </Field>
-              <Field label="Package Qty" required>
-                <input type="number" min="0" step="1" value={packageQty} onChange={(e) => setPackageQty(e.target.value)} />
-              </Field>
-            </div>
+              <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink-700)', textTransform: 'uppercase', letterSpacing: 0.4, margin: '4px 0 8px' }}>
+                Packages — add a line per UOM (e.g. 1 PLT + 10 CTN + 600 PCS)
+              </p>
+              <QtyLinesEditor
+                lines={pkgLines}
+                onChange={setPkgLines}
+                uoms={db.uoms.map((u) => u.name)}
+                qtyLabel="Package Qty"
+                uomLabel="Package UOM"
+                totalLabel="Total packages"
+              />
+            </>
           )}
         </>
       ) : (
@@ -130,42 +135,7 @@ export function EndActivityModal({ activity, onClose }) {
           <div className="banner banner-info">
             💡 One job can be chargeable in several UOMs — add a line per UOM (e.g. 1 PLT + 10 CTN + 600 PCS). Each line becomes a separate billing charge.
           </div>
-          {qtyLines.map((line, idx) => (
-            <div key={idx} className="row" style={{ marginBottom: 10, alignItems: 'flex-end' }}>
-              <Field label={idx === 0 ? 'Quantity' : ''} required={idx === 0}>
-                <input
-                  type="number" min="0" step="0.01" style={{ width: 140 }}
-                  value={line.qty}
-                  onChange={(e) => setLine(idx, 'qty', e.target.value)}
-                  autoFocus={idx === 0}
-                />
-              </Field>
-              <Field label={idx === 0 ? 'UOM' : ''} required={idx === 0}>
-                <Select
-                  value={line.uom}
-                  onChange={(v) => setLine(idx, 'uom', v)}
-                  options={db.uoms.map((u) => u.name).filter((n) => n === line.uom || !qtyLines.some((l) => l.uom === n))}
-                  placeholder="Select UOM…"
-                  style={{ width: 150 }}
-                />
-              </Field>
-              {qtyLines.length > 1 && (
-                <div style={{ paddingBottom: 12 }}>
-                  <button className="btn btn-sm btn-danger" onClick={() => removeLine(idx)} title="Remove this UOM line">✕</button>
-                </div>
-              )}
-            </div>
-          ))}
-          <div className="spread" style={{ marginBottom: 4 }}>
-            <button className="btn btn-sm btn-outline" onClick={addLine} disabled={qtyLines.length >= db.uoms.length}>
-              ＋ Add UOM line
-            </button>
-            {qtyLines.length > 1 && (
-              <span style={{ fontSize: 12.5, color: 'var(--ink-500)' }}>
-                Total quantity: <b>{totalQty}</b> across {qtyLines.length} UOM lines
-              </span>
-            )}
-          </div>
+          <QtyLinesEditor lines={qtyLines} onChange={setQtyLines} uoms={db.uoms.map((u) => u.name)} />
         </>
       )}
 

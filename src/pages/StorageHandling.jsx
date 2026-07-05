@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
 import ImportButton from '../components/ImportButton.jsx'
-import { fmtDate, fmtNum, num, todayISO } from '../utils.js'
+import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
+import { fmtDate, fmtNum, num, todayISO, pkgDisplay } from '../utils.js'
 import { exportXlsx } from '../excel.js'
 
 function MovementModal({ movement, onClose }) {
@@ -11,26 +12,39 @@ function MovementModal({ movement, onClose }) {
     movement || {
       customer: '', date: todayISO(), reference: '', type: 'Inbound', cbm: '',
       storage: '', handlingMode: '', containerSize: '', truckCount: '1',
-      packageQty: '', packageUom: '', storageDays: '',
+      storageDays: '',
     },
+  )
+  const [pkgLines, setPkgLines] = useState(
+    movement?.packageLines?.length
+      ? movement.packageLines.map((l) => ({ qty: String(l.qty), uom: l.uom }))
+      : movement?.packageQty != null && movement?.packageQty !== ''
+        ? [{ qty: String(movement.packageQty), uom: movement.packageUom || '' }]
+        : [{ qty: '', uom: '' }],
   )
   const set = (k) => (v) => setM((s) => ({ ...s, [k]: v }))
   const setE = (k) => (e) => setM((s) => ({ ...s, [k]: e.target.value }))
 
   const storageTypes = [...new Set(db.storageRates.map((r) => r.storageType))]
   const needsVehicle = m.handlingMode === 'Container' || m.handlingMode === 'Trailer'
+  // packages are optional on manual movements: either fully empty or fully valid lines
+  const pkgsEntered = pkgLines.some((l) => l.qty || l.uom)
   const valid = m.customer && m.date && m.reference && m.type && num(m.cbm) > 0 && m.storage &&
-    (!m.handlingMode || (m.handlingMode === 'Loose' ? true : m.containerSize && num(m.truckCount) > 0))
+    (!m.handlingMode || (m.handlingMode === 'Loose' ? true : m.containerSize && num(m.truckCount) > 0)) &&
+    (!pkgsEntered || validQtyLines(pkgLines))
 
   function save() {
+    const cleanPkgs = pkgsEntered ? pkgLines.map((l) => ({ qty: num(l.qty), uom: l.uom })) : null
     upsert('storageMovements', {
       ...m,
       cbm: num(m.cbm),
       truckCount: needsVehicle ? num(m.truckCount) : null,
       containerSize: needsVehicle ? m.containerSize : null,
       handlingMode: m.handlingMode || null,
-      packageQty: m.packageQty === '' ? null : num(m.packageQty),
-      storageDays: m.storageDays === '' ? null : num(m.storageDays),
+      packageLines: cleanPkgs,
+      packageQty: cleanPkgs ? qtyLinesTotal(cleanPkgs) : null,
+      packageUom: cleanPkgs && cleanPkgs.length === 1 ? cleanPkgs[0].uom : null,
+      storageDays: m.storageDays === '' || m.storageDays == null ? null : num(m.storageDays),
     }, { entityType: 'Storage', label: 'storage movement' })
     toast('Storage movement saved')
     onClose()
@@ -80,16 +94,22 @@ function MovementModal({ movement, onClose }) {
             </Field>
           </>
         )}
-        <Field label="Package Qty">
-          <input type="number" min="0" value={m.packageQty ?? ''} onChange={setE('packageQty')} />
-        </Field>
-        <Field label="Package UOM">
-          <Select value={m.packageUom || ''} onChange={set('packageUom')} options={db.uoms.map((u) => u.name)} placeholder="Select…" />
-        </Field>
         <Field label="Storage Days" hint="Leave empty to bill days remaining in the month">
           <input type="number" min="1" value={m.storageDays ?? ''} onChange={setE('storageDays')} />
         </Field>
       </div>
+      <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink-700)', textTransform: 'uppercase', letterSpacing: 0.4, margin: '4px 0 8px' }}>
+        Packages (optional) — add a line per UOM
+      </p>
+      <QtyLinesEditor
+        lines={pkgLines}
+        onChange={setPkgLines}
+        uoms={db.uoms.map((u) => u.name)}
+        qtyLabel="Package Qty"
+        uomLabel="Package UOM"
+        totalLabel="Total packages"
+        required={false}
+      />
     </Modal>
   )
 }
@@ -201,7 +221,8 @@ export default function StorageHandling() {
       movements.map((m) => ({
         Date: m.date, Customer: m.customer, Reference: m.reference, Type: m.type,
         CBM: m.cbm, Storage: m.storage, Handling: m.handlingMode || '', Vehicle: m.containerSize || '',
-        Trucks: m.truckCount || '', 'Package Qty': m.packageQty || '', 'Package UOM': m.packageUom || '',
+        Trucks: m.truckCount || '', 'Package Qty': m.packageLines?.length > 1 ? pkgDisplay(m) : m.packageQty || '',
+        'Package UOM': m.packageLines?.length > 1 ? 'Multi' : m.packageUom || '',
         'Storage Days': m.storageDays ?? 'auto',
       })),
       'Storage Movements',
@@ -258,8 +279,8 @@ export default function StorageHandling() {
                       <td>{m.handlingMode || '—'}</td>
                       <td>{m.containerSize || '—'}</td>
                       <td className="num">{m.truckCount ?? '—'}</td>
-                      <td className="num">{m.packageQty ?? '—'}</td>
-                      <td>{m.packageUom || '—'}</td>
+                      <td className="num" style={{ whiteSpace: 'nowrap' }}>{pkgDisplay(m)}</td>
+                      <td>{m.packageLines?.length > 1 ? <span className="badge badge-blue">MULTI</span> : m.packageUom || '—'}</td>
                       <td>{m.sourceActivityId ? <span className="badge badge-brand">AUTO</span> : <span className="badge badge-gray">MANUAL</span>}</td>
                       <td>
                         <div className="row" style={{ gap: 5, flexWrap: 'nowrap' }}>

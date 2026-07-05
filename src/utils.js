@@ -118,6 +118,15 @@ export function qtyDisplay(a) {
   return `${a.qty}${a.uom ? ' ' + a.uom : ''}`
 }
 
+/** Same for movement/activity package details: packageLines[] or flat packageQty/packageUom. */
+export function pkgDisplay(x) {
+  if (Array.isArray(x.packageLines) && x.packageLines.length > 1) {
+    return x.packageLines.map((l) => `${l.qty} ${l.uom}`).join(' + ')
+  }
+  if (x.packageQty == null || x.packageQty === '') return '—'
+  return `${x.packageQty}${x.packageUom ? ' ' + x.packageUom : ''}`
+}
+
 // ---- Misc ---------------------------------------------------------------
 
 export function classNames(...parts) {

@@ -51,7 +51,7 @@ All dates are stored ISO (`YYYY-MM-DD` / ISO datetime) internally.
 4. Select Customer, Customer Reference and Activity Type → **Start Activity**. A live timer runs; you can **Pause / Resume**. One active task per user — but colleagues can **Join** your running activity as participants (and **Leave** it).
 5. **End Activity** opens the completion modal:
    - **Normal activities** (Picking, Packing, …): Quantity + UOM.
-   - **Offloading (inbound) / Loading (outbound)**: CBM, Storage type, Handling type (Container / Trailer / Loose); Container/Trailer add Vehicle type (20ft/40ft) + number of trucks; all modes capture Package UOM + Qty. The modal shows the billing hint — ending it records a **storage movement** plus **Storage In/Out and Handling In/Out billing lines** automatically.
+   - **Offloading (inbound) / Loading (outbound)**: CBM, Storage type, Handling type (Container / Trailer / Loose); Container/Trailer add Vehicle type (20ft/40ft) + number of trucks; all modes capture package details as **one line per UOM** (e.g. 1 PLT + 10 CTN + 600 PCS). The modal shows the billing hint — ending it records a **storage movement** plus **Storage In/Out and Handling In/Out billing lines** automatically.
 6. Choose **Forward** (job continues — adds a row to the Pending Activity queue) or **Finish** (closes any matching pending assignment).
 
 ### End of shift

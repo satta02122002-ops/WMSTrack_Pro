@@ -560,6 +560,7 @@ export function StoreProvider({ children }) {
             containerSize: payload.handlingMode === 'Loose' ? null : payload.vehicleType,
             truckCount: payload.handlingMode === 'Loose' ? null : num(payload.truckCount),
             packageQty: num(payload.packageQty), packageUom: payload.packageUom,
+            packageLines: payload.packageLines || null,
             storageDays: null, sourceActivityId: id,
           }
           next = { ...next, storageMovements: [mov, ...next.storageMovements] }

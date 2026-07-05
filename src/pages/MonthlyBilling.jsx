@@ -76,7 +76,7 @@ export default function MonthlyBilling() {
         return {
           'CUSTOMER NAME': l.customerName, DATE: l.date, 'CUSTOMER REF NO': l.customerRef, ACTIVITY: l.activity,
           'HANDLING TYPE': l.handlingType, 'VEHICLE TYPE': l.vehicleType, 'NO OF TRUCKS': l.truckCount,
-          'CBM QTY': l.cbmQty, 'PACKAGE QTY': l.packageQty, 'PACKAGE UOM': l.packageUom,
+          'CBM QTY': l.cbmQty, 'PACKAGE QTY': l.packageDetail || l.packageQty, 'PACKAGE UOM': l.packageUom,
           'BILLING STATUS': billed ? 'Billed' : 'Not billed', 'BILLED BY': billed?.billedBy || '', 'BILLED DATE': billed?.billedDate || '',
           CURRENCY: l.currency, 'COMBINED RATE': l.combinedRate, 'TOTAL VALUE': l.totalValue,
         }
@@ -196,7 +196,9 @@ export default function MonthlyBilling() {
                         <td>{l.vehicleType || '—'}</td>
                         <td className="num">{l.truckCount || '—'}</td>
                         <td className="num">{l.cbmQty !== '' ? fmtNum(l.cbmQty) : '—'}</td>
-                        <td className="num">{l.packageQty !== '' && l.packageQty != null ? fmtNum(num(l.packageQty), 0) : '—'}</td>
+                        <td className="num" style={l.packageDetail ? { whiteSpace: 'nowrap' } : undefined}>
+                          {l.packageDetail || (l.packageQty !== '' && l.packageQty != null ? fmtNum(num(l.packageQty), 0) : '—')}
+                        </td>
                         <td>{l.packageUom || '—'}</td>
                         <td><StatusBadge status={billed ? 'billed' : 'notbilled'} /></td>
                         <td>{billed?.billedBy || '—'}</td>

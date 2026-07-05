@@ -76,6 +76,9 @@ export function computeBillingLines(db, period) {
   for (const m of movements) {
     const inbound = m.type === 'Inbound'
     const cur = customerCurrency(m.customer)
+    const multiPkg = Array.isArray(m.packageLines) && m.packageLines.length > 1
+    const pkgUom = multiPkg ? 'Multi' : m.packageUom || ''
+    const pkgDetail = multiPkg ? m.packageLines.map((l) => `${l.qty} ${l.uom}`).join(' + ') : null
 
     // Storage line
     const sr = db.storageRates.find((r) => r.customer === m.customer && r.storageType === m.storage)
@@ -87,7 +90,7 @@ export function computeBillingLines(db, period) {
       customerName: m.customer, date: m.date, customerRef: m.reference,
       activity: inbound ? 'Storage In' : 'Storage Out',
       handlingType: m.storage || '', vehicleType: '', truckCount: '',
-      cbmQty: num(m.cbm), packageQty: m.packageQty || '', packageUom: m.packageUom || '',
+      cbmQty: num(m.cbm), packageQty: m.packageQty || '', packageUom: pkgUom, packageDetail: pkgDetail,
       currency: sr?.currency || cur,
       combinedRate: round2(days * sRate), // rate per CBM for the period
       totalValue: round2(days * num(m.cbm) * sRate),
@@ -121,7 +124,7 @@ export function computeBillingLines(db, period) {
         activity: `Handling ${inbound ? 'In' : 'Out'} ${m.handlingMode}`,
         handlingType: m.handlingMode, vehicleType: m.containerSize || '',
         truckCount: m.truckCount || '',
-        cbmQty: num(m.cbm), packageQty: m.packageQty || '', packageUom: m.packageUom || '',
+        cbmQty: num(m.cbm), packageQty: m.packageQty || '', packageUom: pkgUom, packageDetail: pkgDetail,
         currency: hr?.currency || cur,
         combinedRate: rate, totalValue: finalAmount,
         minimumApplied: finalAmount > amount, rateMissing: !hr,
