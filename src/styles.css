@@ -192,14 +192,14 @@ input:focus, select:focus, textarea:focus {
 
 /* ---------- Tables ---------- */
 .table-wrap { overflow-x: auto; border: 1px solid var(--ink-200); border-radius: var(--radius); background: var(--white); }
-table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto; }
 table.data th {
   background: var(--ink-50); color: var(--ink-500);
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
   text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--ink-200);
   white-space: nowrap; position: sticky; top: 0;
 }
-table.data td { padding: 9px 12px; border-bottom: 1px solid var(--ink-100); vertical-align: middle; }
+table.data td { padding: 9px 12px; border-bottom: 1px solid var(--ink-100); vertical-align: middle; white-space: nowrap; }
 table.data tr:last-child td { border-bottom: none; }
 table.data tbody tr:hover { background: var(--brand-50); }
 table.data td.num, table.data th.num { text-align: right; font-variant-numeric: tabular-nums; }
