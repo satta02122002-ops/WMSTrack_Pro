@@ -71,8 +71,8 @@ export const IMPORT_TEMPLATES = {
   },
   unitValues: {
     label: 'Unit Values',
-    headers: ['customer', 'activity', 'uom', 'unitRate', 'currency', 'minimumFixedValue'],
-    sample: [{ customer: 'Example Customer Ltd', activity: 'Picking', uom: 'CTN', unitRate: 0.5, currency: 'USD', minimumFixedValue: 0 }],
+    headers: ['customer', 'activity', 'uom', 'unitRate', 'currency', 'minimumCharge', 'minimumFixedValue'],
+    sample: [{ customer: 'Example Customer Ltd', activity: 'Picking', uom: 'CTN', unitRate: 0.5, currency: 'USD', minimumCharge: 0, minimumFixedValue: 0 }],
     note: 'customer/activity/uom must match existing master data names',
   },
   storageRates: {

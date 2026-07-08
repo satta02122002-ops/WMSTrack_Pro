@@ -72,22 +72,23 @@ function seedDb() {
   const vehicleTypes = ['20ft', '40ft'].map((name) => ({ id: uid('veh'), name }))
 
   const unitValues = []
+  // [customer, activity, uom, unitRate, currency, minimumCharge (per-job), minimumFixedValue (monthly)]
   const uvSeed = [
-    ['Acme Trading Co', 'Picking', 'CTN', 0.45, 'USD', 500],
-    ['Acme Trading Co', 'Picking', 'PLT', 4.5, 'USD', 0],
-    ['Acme Trading Co', 'Picking', 'PCS', 0.05, 'USD', 0],
-    ['Acme Trading Co', 'Packing', 'CTN', 0.55, 'USD', 0],
-    ['Acme Trading Co', 'Labeling', 'PCS', 0.08, 'USD', 0],
-    ['Acme Trading Co', 'Sorting', 'CTN', 0.3, 'USD', 0],
-    ['Gulf Distribution LLC', 'Picking', 'CTN', 0.5, 'USD', 0],
-    ['Gulf Distribution LLC', 'Packing', 'PLT', 4.5, 'USD', 0],
-    ['Gulf Distribution LLC', 'Kitting', 'PCS', 0.12, 'USD', 300],
-    ['Nordwind Retail', 'Picking', 'CTN', 0.4, 'EUR', 0],
-    ['Nordwind Retail', 'Labeling', 'PCS', 0.07, 'EUR', 0],
-    ['Nordwind Retail', 'Cycle Count', 'PLT', 2.0, 'EUR', 0],
+    ['Acme Trading Co', 'Picking', 'CTN', 0.45, 'USD', 10, 500],
+    ['Acme Trading Co', 'Picking', 'PLT', 4.5, 'USD', 15, 0],
+    ['Acme Trading Co', 'Picking', 'PCS', 0.05, 'USD', 5, 0],
+    ['Acme Trading Co', 'Packing', 'CTN', 0.55, 'USD', 10, 0],
+    ['Acme Trading Co', 'Labeling', 'PCS', 0.08, 'USD', 5, 0],
+    ['Acme Trading Co', 'Sorting', 'CTN', 0.3, 'USD', 8, 0],
+    ['Gulf Distribution LLC', 'Picking', 'CTN', 0.5, 'USD', 12, 0],
+    ['Gulf Distribution LLC', 'Packing', 'PLT', 4.5, 'USD', 15, 0],
+    ['Gulf Distribution LLC', 'Kitting', 'PCS', 0.12, 'USD', 5, 300],
+    ['Nordwind Retail', 'Picking', 'CTN', 0.4, 'EUR', 10, 0],
+    ['Nordwind Retail', 'Labeling', 'PCS', 0.07, 'EUR', 5, 0],
+    ['Nordwind Retail', 'Cycle Count', 'PLT', 2.0, 'EUR', 8, 0],
   ]
-  for (const [customer, activity, uom, unitRate, currency, minimumFixedValue] of uvSeed) {
-    unitValues.push({ id: uid('uv'), customer, activity, uom, unitRate, currency, minimumFixedValue })
+  for (const [customer, activity, uom, unitRate, currency, minimumCharge, minimumFixedValue] of uvSeed) {
+    unitValues.push({ id: uid('uv'), customer, activity, uom, unitRate, currency, minimumCharge, minimumFixedValue })
   }
 
   const storageRates = []

@@ -65,11 +65,11 @@ function ActivityModal({ record, onClose }) {
 
 function UnitValueModal({ record, onClose }) {
   const { db, upsert, toast } = useStore()
-  const [r, setR] = useState(record || { customer: '', activity: '', uom: '', unitRate: '', currency: 'USD', minimumFixedValue: '' })
+  const [r, setR] = useState(record || { customer: '', activity: '', uom: '', unitRate: '', currency: 'USD', minimumCharge: '', minimumFixedValue: '' })
   const valid = r.customer && r.activity && r.uom && num(r.unitRate) > 0
 
   function save() {
-    upsert('unitValues', { ...r, unitRate: num(r.unitRate), minimumFixedValue: num(r.minimumFixedValue) }, { entityType: 'Master Data', label: 'unit value' })
+    upsert('unitValues', { ...r, unitRate: num(r.unitRate), minimumCharge: num(r.minimumCharge), minimumFixedValue: num(r.minimumFixedValue) }, { entityType: 'Master Data', label: 'unit value' })
     toast('Unit value saved')
     onClose()
   }
@@ -92,6 +92,9 @@ function UnitValueModal({ record, onClose }) {
         </Field>
         <Field label="Currency" required>
           <Select value={r.currency} onChange={(v) => setR((s) => ({ ...s, currency: v }))} options={db.currencies.map((c) => c.name)} />
+        </Field>
+        <Field label="Per-job minimum charge" hint="0 = no minimum; if qty × rate is lower, this amount is billed instead">
+          <input type="number" min="0" step="0.01" value={r.minimumCharge} onChange={(e) => setR((s) => ({ ...s, minimumCharge: e.target.value }))} />
         </Field>
         <Field label="Monthly minimum value" hint="0 = no minimum; top-up added at billing when the month total is lower">
           <input type="number" min="0" step="0.01" value={r.minimumFixedValue} onChange={(e) => setR((s) => ({ ...s, minimumFixedValue: e.target.value }))} />
@@ -174,7 +177,7 @@ export default function MasterData() {
       if (!row.customer || !row.activity || !row.uom || !num(row.unitRate)) { skipped++; continue }
       upsert('unitValues', {
         customer: String(row.customer), activity: String(row.activity), uom: String(row.uom),
-        unitRate: num(row.unitRate), currency: String(row.currency || 'USD'), minimumFixedValue: num(row.minimumFixedValue),
+        unitRate: num(row.unitRate), currency: String(row.currency || 'USD'), minimumCharge: num(row.minimumCharge), minimumFixedValue: num(row.minimumFixedValue),
       }, { entityType: 'Master Data', label: 'unit value (import)' })
       imported++
     }
@@ -301,7 +304,7 @@ export default function MasterData() {
           {db.unitValues.length === 0 ? <EmptyState icon="💲" title="No unit values" hint="Without a unit value, completed activities bill at 0." /> : (
             <div className="table-wrap">
               <table className="data">
-                <thead><tr><th>Customer</th><th>Activity</th><th>UOM</th><th className="num">Rate</th><th>Currency</th><th className="num">Monthly Minimum</th><th></th></tr></thead>
+                <thead><tr><th>Customer</th><th>Activity</th><th>UOM</th><th className="num">Rate</th><th>Currency</th><th className="num">Per-Job Min</th><th className="num">Monthly Min</th><th></th></tr></thead>
                 <tbody>
                   {db.unitValues.map((v) => (
                     <tr key={v.id}>
@@ -310,6 +313,7 @@ export default function MasterData() {
                       <td>{v.uom}</td>
                       <td className="num">{fmtNum(v.unitRate, 4)}</td>
                       <td>{v.currency}</td>
+                      <td className="num">{num(v.minimumCharge) > 0 ? fmtNum(v.minimumCharge) : '—'}</td>
                       <td className="num">{num(v.minimumFixedValue) > 0 ? fmtNum(v.minimumFixedValue) : '—'}</td>
                       <td>
                         <div className="row" style={{ gap: 5, flexWrap: 'nowrap' }}>

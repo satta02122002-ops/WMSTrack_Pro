@@ -32,7 +32,9 @@ export function computeBillingLines(db, period) {
         (v) => v.customer === a.customerName && v.activity === a.type && (!ql.uom || v.uom === ql.uom),
       )
       const rate = uv ? num(uv.unitRate) : 0
-      const total = round2(num(ql.qty) * rate)
+      const calculated = round2(num(ql.qty) * rate)
+      const minCharge = uv ? num(uv.minimumCharge) : 0
+      const total = minCharge > 0 ? Math.max(calculated, minCharge) : calculated
       const gkey = `${a.customerName}|${a.type}|${ql.uom || uv?.uom || ''}`
       groupTotals.set(gkey, round2((groupTotals.get(gkey) || 0) + total))
       lines.push({
@@ -45,6 +47,7 @@ export function computeBillingLines(db, period) {
         currency: uv?.currency || customerCurrency(a.customerName),
         combinedRate: rate, totalValue: total,
         rateMissing: !uv,
+        minimumApplied: minCharge > 0 && calculated < minCharge,
       })
     })
   }
