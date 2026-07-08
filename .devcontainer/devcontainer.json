@@ -1,11 +1,11 @@
 {
-  "name": "WMSTrack Pro",
+  "name": "LogiTrack Pro",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
   "postCreateCommand": "npm install",
   "forwardPorts": [5173, 4173],
   "portsAttributes": {
-    "5173": { "label": "WMSTrack Pro (dev)", "onAutoForward": "openBrowser", "visibility": "public" },
-    "4173": { "label": "WMSTrack Pro (preview)", "visibility": "public" }
+    "5173": { "label": "LogiTrack Pro (dev)", "onAutoForward": "openBrowser", "visibility": "public" },
+    "4173": { "label": "LogiTrack Pro (preview)", "visibility": "public" }
   },
   "customizations": {
     "vscode": {

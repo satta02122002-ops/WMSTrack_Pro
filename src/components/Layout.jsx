@@ -68,7 +68,7 @@ export default function Layout({ page, setPage, children }) {
           <Logo size={30} />
         </div>
         <div className="header-title">
-          WMSTrack Pro
+          LogiTrack Pro
           <small>Integrated Service Solutions</small>
         </div>
         <div className="header-spacer" />

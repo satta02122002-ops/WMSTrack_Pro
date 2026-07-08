@@ -35,7 +35,7 @@ export default function Login() {
         <div className="login-logo">
           <Logo size={74} />
         </div>
-        <h1>WMSTrack Pro</h1>
+        <h1>LogiTrack Pro</h1>
         <div className="sub">Integrated Service Solutions · Warehouse Operations &amp; Billing</div>
         {error && <div className="login-error">{error}</div>}
         <Field label="User ID" required>

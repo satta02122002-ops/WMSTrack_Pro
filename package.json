@@ -1,8 +1,8 @@
 {
-  "name": "wmstrack-pro",
+  "name": "logitrack-pro",
   "private": true,
   "version": "1.0.0",
-  "description": "WMSTrack Pro - Warehouse operations tracking and billing system for contract logistics / 3PL warehouses",
+  "description": "LogiTrack Pro - Warehouse operations tracking and billing system for contract logistics / 3PL warehouses",
   "type": "module",
   "scripts": {
     "dev": "vite",

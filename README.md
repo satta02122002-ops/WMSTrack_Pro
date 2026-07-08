@@ -1,4 +1,4 @@
-# WMSTrack Pro
+# LogiTrack Pro
 
 A production-ready warehouse operations tracking and billing system for contract logistics / 3PL warehouses. Track daily warehouse work (operations, storage, handling, VAS, attendance), calculate billable quantities, and generate monthly customer billing — with multi-user roles, an audit trail, analytics dashboards and Excel export throughout.
 
