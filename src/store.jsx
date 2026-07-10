@@ -122,6 +122,19 @@ function computeChanges(baseline, current) {
   return Object.keys(changes).length ? changes : null
 }
 
+// Backfill reference lists added after a database was first created, so legacy
+// documents (missing the key entirely) get sensible defaults. Only runs when
+// the key is absent — an intentionally emptied list is left alone.
+function ensureDefaults(data) {
+  if (data && !Array.isArray(data.storageTypes)) {
+    return {
+      ...data,
+      storageTypes: ['Normal Storage', 'Cold Storage', 'Bonded Storage'].map((name) => ({ id: uid('sty'), name })),
+    }
+  }
+  return data
+}
+
 function loadSession() {
   try {
     return JSON.parse(localStorage.getItem(SESSION_KEY)) || null
@@ -167,7 +180,7 @@ export function StoreProvider({ children }) {
         if (cancelled) return
         if (data && typeof data === 'object' && Array.isArray(data.users)) {
           baselineRef.current = data
-          setDb(data)
+          setDb(ensureDefaults(data)) // baseline lacks any backfill, so it syncs on first change
         }
         setDbReady(true)
         setTimeout(() => { initialLoadRef.current = false }, 100)
@@ -332,7 +345,7 @@ export function StoreProvider({ children }) {
         const dbRes = await fetchDbFromApi()
         if (dbRes.data && typeof dbRes.data === 'object') {
           baselineRef.current = dbRes.data
-          setDb(dbRes.data)
+          setDb(ensureDefaults(dbRes.data)) // baseline lacks any backfill, so it syncs on first change
           initialLoadRef.current = false
         }
 

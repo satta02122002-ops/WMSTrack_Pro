@@ -223,6 +223,7 @@ app.post('/api/db/clear-demo-data', authMiddleware, async (req, res) => {
       uoms: [],
       currencies: [],
       vehicleTypes: [],
+      storageTypes: [],
       unitValues: [],
       storageRates: [],
       handlingRates: [],

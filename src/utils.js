@@ -76,6 +76,20 @@ export function monthName(month1based) {
   return new Date(2000, month1based - 1, 1).toLocaleString(undefined, { month: 'long' })
 }
 
+export const DEFAULT_STORAGE_TYPES = ['Normal Storage', 'Cold Storage', 'Bonded Storage']
+
+/**
+ * Storage-type options for dropdowns: the managed Parameter list, unioned with
+ * any types already used on storage rates, falling back to the defaults so the
+ * app keeps working before the list is set up.
+ */
+export function storageTypeNames(db) {
+  const set = new Set()
+  for (const s of db.storageTypes || []) if (s?.name) set.add(s.name)
+  for (const r of db.storageRates || []) if (r?.storageType) set.add(r.storageType)
+  return set.size ? [...set] : [...DEFAULT_STORAGE_TYPES]
+}
+
 /** Days from a movement date to the end of its month, inclusive (default storage-day count). */
 export function daysToMonthEnd(isoDate) {
   const d = new Date(isoDate + 'T00:00:00')

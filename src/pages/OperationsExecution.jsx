@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
 import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
-import { activityDuration, fmtDuration, fmtTime, num } from '../utils.js'
+import { activityDuration, fmtDuration, fmtTime, num, storageTypeNames } from '../utils.js'
 
 function useTick(active, intervalMs = 1000) {
   const [, setN] = useState(0)
@@ -27,11 +27,7 @@ export function EndActivityModal({ activity, onClose }) {
   // Offloading/Loading packages can also span several UOMs (recorded on the movement)
   const [pkgLines, setPkgLines] = useState([{ qty: '', uom: '' }])
 
-  const storageTypes = useMemo(() => {
-    const fromRates = db.storageRates.filter((r) => r.customer === activity.customerName).map((r) => r.storageType)
-    const all = [...new Set([...fromRates, ...db.storageRates.map((r) => r.storageType)])]
-    return all.length ? all : ['Normal Storage', 'Cold Storage']
-  }, [db.storageRates, activity.customerName])
+  const storageTypes = useMemo(() => storageTypeNames(db), [db.storageTypes, db.storageRates])
 
   const needsVehicle = handlingMode === 'Container' || handlingMode === 'Trailer'
   const valid = isStorage

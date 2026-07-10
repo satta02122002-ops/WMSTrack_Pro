@@ -47,6 +47,7 @@ export async function seedDb() {
   const uoms = ['CTN', 'PLT', 'PCS', 'KG', 'CBM'].map((name) => ({ id: uid('uom'), name }))
   const currencies = ['USD', 'EUR', 'SAR'].map((name) => ({ id: uid('cur'), name }))
   const vehicleTypes = ['20ft', '40ft'].map((name) => ({ id: uid('veh'), name }))
+  const storageTypes = ['Normal Storage', 'Cold Storage', 'Bonded Storage'].map((name) => ({ id: uid('sty'), name }))
 
   const unitValues = []
   const uvSeed = [
@@ -88,7 +89,7 @@ export async function seedDb() {
   ]
 
   const db = {
-    version: 1, createdAt: nowISO(), users, customers, activitiesMaster, uoms, currencies, vehicleTypes,
+    version: 1, createdAt: nowISO(), users, customers, activitiesMaster, uoms, currencies, vehicleTypes, storageTypes,
     unitValues, storageRates, handlingRates, handlingCharges: [], storageMovements: [], operationsActivities: [],
     pendingAssignments: [], vasCharges: [], attendance: [], billedRecords: [], auditLog: [],
     settings: { billingApiUrl: '' },

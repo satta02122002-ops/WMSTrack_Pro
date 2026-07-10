@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
 import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
-import { activityDuration, fmtDuration, fmtDate, fmtTime, todayISO, nowISO, uid, num, qtyDisplay } from '../utils.js'
+import { activityDuration, fmtDuration, fmtDate, fmtTime, todayISO, nowISO, uid, num, qtyDisplay, storageTypeNames } from '../utils.js'
 import { exportXlsx } from '../excel.js'
 
 function ManualActivityModal({ onClose }) {
@@ -25,7 +25,7 @@ function ManualActivityModal({ onClose }) {
   const master = db.activitiesMaster.find((a) => a.name === type)
   const isStorage = master?.storageType === 'inbound' || master?.storageType === 'outbound'
   const needsVehicle = handlingMode === 'Container' || handlingMode === 'Trailer'
-  const storageTypes = [...new Set(db.storageRates.map((r) => r.storageType))]
+  const storageTypes = storageTypeNames(db)
   const customer = db.customers.find((c) => c.name === customerName)
 
   const valid = customerName && customerRef.trim() && type && date && num(durationMin) > 0 && (

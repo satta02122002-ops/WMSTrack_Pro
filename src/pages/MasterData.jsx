@@ -3,7 +3,7 @@ import { useStore } from '../store.jsx'
 import { Modal, Field, Select, EmptyState } from '../components/ui.jsx'
 import ImportButton from '../components/ImportButton.jsx'
 import { HandlingRateModal } from './StorageHandling.jsx'
-import { fmtNum, num } from '../utils.js'
+import { fmtNum, num, storageTypeNames } from '../utils.js'
 import { exportXlsx } from '../excel.js'
 
 function CustomerModal({ record, onClose }) {
@@ -121,8 +121,8 @@ function StorageRateModal({ record, onClose }) {
       <Field label="Customer" required>
         <Select value={r.customer} onChange={(v) => setR((s) => ({ ...s, customer: v, currency: db.customers.find((c) => c.name === v)?.currency || s.currency }))} options={db.customers.map((c) => c.name)} placeholder="Select…" />
       </Field>
-      <Field label="Storage type" required hint="e.g. Normal Storage, Cold Storage, Bonded Storage">
-        <input type="text" value={r.storageType} onChange={(e) => setR((s) => ({ ...s, storageType: e.target.value }))} />
+      <Field label="Storage type" required hint="Managed under Parameter → Storage Types">
+        <Select value={r.storageType} onChange={(v) => setR((s) => ({ ...s, storageType: v }))} options={storageTypeNames(db)} placeholder="Select storage type…" />
       </Field>
       <Field label="Rate per CBM per day" required hint="Storage is billed as rate × CBM × days stored">
         <input type="number" min="0" step="0.0001" value={r.unitRate} onChange={(e) => setR((s) => ({ ...s, unitRate: e.target.value }))} />

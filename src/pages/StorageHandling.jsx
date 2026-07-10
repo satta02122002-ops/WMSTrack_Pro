@@ -3,7 +3,7 @@ import { useStore } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
 import ImportButton from '../components/ImportButton.jsx'
 import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
-import { fmtDate, fmtNum, num, todayISO, pkgDisplay } from '../utils.js'
+import { fmtDate, fmtNum, num, todayISO, pkgDisplay, storageTypeNames } from '../utils.js'
 import { exportXlsx } from '../excel.js'
 import { manualHandlingAmount } from '../billing.js'
 
@@ -28,7 +28,7 @@ function MovementModal({ movement, onClose }) {
   const set = (k) => (v) => setM((s) => ({ ...s, [k]: v }))
   const setE = (k) => (e) => setM((s) => ({ ...s, [k]: e.target.value }))
 
-  const storageTypes = [...new Set(db.storageRates.map((r) => r.storageType))]
+  const storageTypes = storageTypeNames(db)
   const needsVehicle = m.handlingMode === 'Container' || m.handlingMode === 'Trailer'
   // packages are optional on manual movements: either fully empty or fully valid lines
   const pkgsEntered = pkgLines.some((l) => l.qty || l.uom)

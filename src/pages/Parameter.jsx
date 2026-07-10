@@ -71,6 +71,7 @@ export default function Parameter() {
       <SimpleMaster collection="uoms" title="Units of Measure (UOM)" icon="📏" hint="e.g. CTN, PLT, PCS" importKind="uoms" />
       <SimpleMaster collection="currencies" title="Currencies" icon="💱" hint="e.g. USD, EUR" />
       <SimpleMaster collection="vehicleTypes" title="Vehicle Types" icon="🚚" hint="e.g. 20ft, 40ft" />
+      <SimpleMaster collection="storageTypes" title="Storage Types" icon="🏬" hint="e.g. Normal Storage, Cold Storage, Bonded Storage" />
     </div>
   )
 }
