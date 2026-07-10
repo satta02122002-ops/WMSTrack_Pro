@@ -70,7 +70,6 @@ export default function Login() {
         <button className="btn btn-primary" style={{ width: '100%', padding: '11px' }} disabled={!userId.trim() || !password || busy}>
           {busy ? 'Signing in…' : 'Sign In'}
         </button>
-        <div className="login-foot">Demo accounts: developer / admin / user (password = user id)</div>
       </form>
     </div>
   )

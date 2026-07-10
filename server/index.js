@@ -236,6 +236,50 @@ app.post('/api/db/reset', authMiddleware, async (req, res) => {
   }
 })
 
+app.post('/api/db/clear-demo-data', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'Developer') {
+      return res.status(403).json({ error: 'Only Developer role can clear demo data' })
+    }
+    const current = await getState()
+    if (!current?.data) return res.status(500).json({ error: 'Database not initialized' })
+
+    const data = {
+      ...current.data,
+      customers: [],
+      activitiesMaster: [],
+      uoms: [],
+      currencies: [],
+      vehicleTypes: [],
+      unitValues: [],
+      storageRates: [],
+      handlingRates: [],
+      storageMovements: [],
+      operationsActivities: [],
+      pendingAssignments: [],
+      vasCharges: [],
+      attendance: [],
+      billedRecords: [],
+      auditLog: [
+        ...(current.data.auditLog || []),
+        {
+          id: `log_${Date.now().toString(36)}`,
+          dateTime: new Date().toISOString(),
+          user: req.user.userId,
+          action: 'Clear Demo Data',
+          entityType: 'System',
+          details: 'Demo transactions and master data cleared; user accounts preserved',
+        },
+      ],
+    }
+    const version = await setState(data)
+    res.json({ ok: true, version, data: stripPasswordHashes(data) })
+  } catch (err) {
+    console.error('POST /api/db/clear-demo-data error:', err)
+    res.status(500).json({ error: 'Failed to clear demo data' })
+  }
+})
+
 // ---- Static files ---------------------------------------------------------
 
 const distDir = join(__dirname, '..', 'dist')

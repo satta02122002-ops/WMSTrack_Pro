@@ -98,7 +98,7 @@ function UserModal({ record, onClose }) {
 }
 
 export default function Users() {
-  const { db, currentUser, upsert, toast, logAction, resetDb } = useStore()
+  const { db, currentUser, upsert, toast, logAction, resetDb, clearDemoData } = useStore()
   const [modal, setModal] = useState(null) // null | 'new' | user record
 
   function toggleActive(u) {
@@ -153,7 +153,13 @@ export default function Users() {
       <div className="card" style={{ borderColor: '#fecaca' }}>
         <div className="card-title" style={{ color: 'var(--red-600)' }}>⚠ Danger Zone</div>
         <p style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 10 }}>
-          Reset the entire local database back to the seed/demo data. All operations, billing and users you created will be lost.
+          Clear all demo transactions and master data (customers, activities, rates, attendance, operations, billing, VAS charges). User accounts are preserved.
+        </p>
+        <button className="btn btn-danger" style={{ marginBottom: 16 }} onClick={() => window.confirm('Clear all demo transactions and master data? User accounts will be kept. This cannot be undone.') && clearDemoData()}>
+          Clear Demo Data
+        </button>
+        <p style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 10 }}>
+          Reset the entire database back to the seed/demo data. All operations, billing and users you created will be lost.
         </p>
         <button className="btn btn-danger" onClick={() => window.confirm('Reset ALL data back to seed/demo state? This cannot be undone.') && resetDb()}>
           Reset Database to Seed Data

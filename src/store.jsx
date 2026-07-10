@@ -635,6 +635,24 @@ export function StoreProvider({ children }) {
     }
   }, [toast])
 
+  const clearDemoData = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/db/clear-demo-data`, {
+        method: 'POST',
+        headers: authHeaders(),
+      })
+      const result = await res.json()
+      if (!res.ok || !result.ok) {
+        toast(result.error || 'Failed to clear demo data', 'error')
+        return
+      }
+      if (result.data) setDb(result.data)
+      toast('Demo transactions and master data cleared', 'info')
+    } catch {
+      toast('Failed to clear demo data', 'error')
+    }
+  }, [toast])
+
   // ---- Loading state ---------------------------------------------------------
 
   if (dbError) {
@@ -669,7 +687,7 @@ export function StoreProvider({ children }) {
       recordBilling: () => {}, unbillRecords: () => {}, billedMap: new Map(),
       logAction: () => {}, toast, toasts,
       prefill: null, setPrefill: () => {},
-      pagesForUser, resetDb: () => {},
+      pagesForUser, resetDb: () => {}, clearDemoData: () => {},
       storageDaysDefault: daysToMonthEnd,
       saveStatus: 'saved',
       setUserPassword: async () => ({ ok: false }),
@@ -685,7 +703,7 @@ export function StoreProvider({ children }) {
     recordBilling, unbillRecords, billedMap,
     logAction, toast, toasts,
     prefill, setPrefill,
-    pagesForUser, resetDb,
+    pagesForUser, resetDb, clearDemoData,
     storageDaysDefault: daysToMonthEnd,
     saveStatus,
     setUserPassword,
