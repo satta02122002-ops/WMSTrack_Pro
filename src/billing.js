@@ -1,11 +1,18 @@
 import { monthKey, daysToMonthEnd, round2, num } from './utils.js'
 
+/** Add n whole days to a YYYY-MM-DD date, returning YYYY-MM-DD (local time). */
+function addDaysIso(iso, n) {
+  const d = new Date(iso + 'T00:00:00')
+  d.setDate(d.getDate() + n)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 /**
  * Compute all billable lines for a given period (YYYY-MM).
  *
  * Sources:
  *  - Completed normal activities  -> qty x unit value (+ monthly minimum top-ups per customer/activity/UOM)
- *  - Storage movements            -> Storage In/Out: days x CBM x storage rate (+ monthly minimum top-ups per customer/storage type)
+ *  - Storage movements            -> one Storage line per day: rate/CBM/day x CBM (+ monthly minimum top-ups per customer/storage type)
  *  - Storage movements (handling) -> Handling In/Out: trucks x rate (Container/Trailer) or CBM x rate (Loose)
  *  - Manual handling charges      -> Handling: qty x charge per unit (ad-hoc)
  *  - VAS charges                  -> qty x charge per unit
@@ -90,36 +97,52 @@ export function computeBillingLines(db, period) {
     })
   }
 
-  // ---- 2 & 3. Storage movements -> storage + handling lines ----------------
+  // ---- 2. Storage movements -> one Storage line per day --------------------
+  // Storage is billed line-by-line for each day the cargo is in storage:
+  // rate per CBM per day × CBM, one line per calendar day within this period.
+  const storageTotals = new Map() // `${customer}|${storageType}` -> total storage this month
+  for (const m of db.storageMovements) {
+    const days = m.storageDays != null && m.storageDays !== '' ? num(m.storageDays) : daysToMonthEnd(m.date)
+    if (days <= 0) continue
+    const sr = db.storageRates.find((r) => r.customer === m.customer && r.storageType === m.storage)
+    const sRate = sr ? num(sr.unitRate) : 0
+    const inbound = m.type === 'Inbound'
+    const cur = customerCurrency(m.customer)
+    const multiPkg = Array.isArray(m.packageLines) && m.packageLines.length > 1
+    const pkgUom = multiPkg ? 'Multi' : m.packageUom || ''
+    const pkgDetail = multiPkg ? m.packageLines.map((l) => `${l.qty} ${l.uom}`).join(' + ') : null
+    const dayAmount = round2(num(m.cbm) * sRate) // one day's storage
+    const stoKey = `${m.customer}|${m.storage}`
+    for (let i = 0; i < days; i++) {
+      const dayIso = addDaysIso(m.date, i)
+      const mk = monthKey(dayIso)
+      if (mk < period) continue
+      if (mk > period) break // days run forward, nothing left in this period
+      storageTotals.set(stoKey, round2((storageTotals.get(stoKey) || 0) + dayAmount))
+      lines.push({
+        id: `sto:${m.id}:${dayIso}`,
+        source: 'storage', reportType: 'Storage',
+        customerName: m.customer, date: dayIso, customerRef: m.reference,
+        activity: inbound ? 'Storage In' : 'Storage Out',
+        handlingType: m.storage || '', vehicleType: '', truckCount: '',
+        cbmQty: num(m.cbm), packageQty: m.packageQty || '', packageUom: pkgUom, packageDetail: pkgDetail,
+        currency: sr?.currency || cur,
+        combinedRate: sRate,     // rate per CBM per day
+        totalValue: dayAmount,   // CBM × rate for this single day
+        storageDays: 1, rateMissing: !sr,
+      })
+    }
+  }
+
+  // ---- 3. Storage movements -> handling lines (one-time per movement) ------
   const movements = db.storageMovements.filter((m) => inPeriod(m.date))
   const handlingTotals = new Map() // customer -> total handling this month
-  const storageTotals = new Map() // `${customer}|${storageType}` -> total storage this month
   for (const m of movements) {
     const inbound = m.type === 'Inbound'
     const cur = customerCurrency(m.customer)
     const multiPkg = Array.isArray(m.packageLines) && m.packageLines.length > 1
     const pkgUom = multiPkg ? 'Multi' : m.packageUom || ''
     const pkgDetail = multiPkg ? m.packageLines.map((l) => `${l.qty} ${l.uom}`).join(' + ') : null
-
-    // Storage line
-    const sr = db.storageRates.find((r) => r.customer === m.customer && r.storageType === m.storage)
-    const days = m.storageDays != null && m.storageDays !== '' ? num(m.storageDays) : daysToMonthEnd(m.date)
-    const sRate = sr ? num(sr.unitRate) : 0
-    const storageAmount = round2(days * num(m.cbm) * sRate) // rate/CBM/day × CBM × days
-    const stoKey = `${m.customer}|${m.storage}`
-    storageTotals.set(stoKey, round2((storageTotals.get(stoKey) || 0) + storageAmount))
-    lines.push({
-      id: `sto:${m.id}`,
-      source: 'storage', reportType: 'Storage',
-      customerName: m.customer, date: m.date, customerRef: m.reference,
-      activity: inbound ? 'Storage In' : 'Storage Out',
-      handlingType: m.storage || '', vehicleType: '', truckCount: '',
-      cbmQty: num(m.cbm), packageQty: m.packageQty || '', packageUom: pkgUom, packageDetail: pkgDetail,
-      currency: sr?.currency || cur,
-      combinedRate: round2(days * sRate), // rate per CBM for the period
-      totalValue: storageAmount,
-      storageDays: days, rateMissing: !sr,
-    })
 
     // Handling line — auto movements (from operations) always bill; manual
     // movements only when "Add Handling Charges" was ticked (applyHandling).
