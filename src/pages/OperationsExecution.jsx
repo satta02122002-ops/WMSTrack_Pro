@@ -38,7 +38,7 @@ export function EndActivityModal({ activity, onClose }) {
       (handlingMode === 'Loose' || (vehicleType && num(truckCount) > 0))
     : validQtyLines(qtyLines)
 
-  function finish(forward) {
+  function finish() {
     let payload
     if (isStorage) {
       const cleanPkgs = pkgLines.map((l) => ({ qty: num(l.qty), uom: l.uom }))
@@ -49,7 +49,7 @@ export function EndActivityModal({ activity, onClose }) {
         packageLines: cleanPkgs,
         packageQty: qtyLinesTotal(cleanPkgs),
         packageUom: cleanPkgs.length === 1 ? cleanPkgs[0].uom : null,
-        forward,
+        forward: false,
       }
     } else {
       const cleanLines = qtyLines.map((l) => ({ qty: num(l.qty), uom: l.uom }))
@@ -57,7 +57,7 @@ export function EndActivityModal({ activity, onClose }) {
         qtyLines: cleanLines,
         qty: qtyLinesTotal(cleanLines),
         uom: cleanLines.length === 1 ? cleanLines[0].uom : null,
-        forward,
+        forward: false,
       }
     }
     endActivity(activity.id, payload)
@@ -72,10 +72,7 @@ export function EndActivityModal({ activity, onClose }) {
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-warn" disabled={!valid} onClick={() => finish(true)} title="Complete this activity and queue the job for the next activity">
-            ⏭ Forward
-          </button>
-          <button className="btn btn-primary" disabled={!valid} onClick={() => finish(false)} title="Complete this activity and close the job">
+          <button className="btn btn-primary" disabled={!valid} onClick={finish} title="Complete this activity and record it for billing">
             ✔ Finish
           </button>
         </>
@@ -137,7 +134,7 @@ export function EndActivityModal({ activity, onClose }) {
       )}
 
       <p style={{ fontSize: 12.5, color: 'var(--ink-500)', marginTop: 10 }}>
-        <b>Forward</b> completes the activity and adds the job to the Pending Activity queue for the next step. <b>Finish</b> completes the activity and closes any matching pending assignment.
+        <b>Finish</b> completes this activity and records it for billing. Other activities assigned for the same job stay in your queue.
       </p>
     </Modal>
   )
@@ -149,7 +146,7 @@ const EXECUTE_ROLES = ['User', 'Developer']
 export default function OperationsExecution() {
   const {
     db, currentUser, needsCheckIn, myActiveActivity,
-    addActivity, startAssignedActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, remove,
+    addActivities, startAssignedActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, remove,
     prefill, setPrefill, toast,
   } = useStore()
   const hasLive = !!myActiveActivity || db.operationsActivities.some((a) => a.status !== 'complete')
@@ -160,7 +157,7 @@ export default function OperationsExecution() {
 
   const [customerName, setCustomerName] = useState('')
   const [customerRef, setCustomerRef] = useState('')
-  const [type, setType] = useState('')
+  const [types, setTypes] = useState(() => new Set())
   const [assignTo, setAssignTo] = useState('')
   const [endOpen, setEndOpen] = useState(false)
   const [fromPending, setFromPending] = useState(false)
@@ -171,7 +168,7 @@ export default function OperationsExecution() {
       if (canAssign) {
         setCustomerName(prefill.customerName || '')
         setCustomerRef(prefill.customerRef || '')
-        setType('')
+        setTypes(new Set())
         setFromPending(true)
         toast(`Add-activity form pre-filled from pending job: ${prefill.customerName} (${prefill.customerRef})`, 'info')
       }
@@ -180,9 +177,20 @@ export default function OperationsExecution() {
   }, [prefill, setPrefill, toast, canAssign])
 
   const customer = db.customers.find((c) => c.name === customerName)
-  const canAddSubmit = customerName && customerRef.trim() && type
+  const canAddSubmit = customerName && customerRef.trim() && types.size > 0
   const isOwner = myActiveActivity && myActiveActivity.owner === currentUser.userId
   const userOptions = db.users.filter((u) => u.active && u.role === 'User').map((u) => ({ value: u.userId, label: u.name }))
+
+  function toggleType(name) {
+    setTypes((s) => {
+      const n = new Set(s)
+      n.has(name) ? n.delete(name) : n.add(name)
+      return n
+    })
+  }
+  function clearJob() {
+    setCustomerName(''); setCustomerRef(''); setTypes(new Set()); setAssignTo(''); setFromPending(false)
+  }
 
   // Activities this user can pick up: assigned to them, or left unassigned.
   const myAssigned = db.operationsActivities.filter(
@@ -196,8 +204,11 @@ export default function OperationsExecution() {
   )
 
   function handleAdd() {
-    addActivity({ customerName, customerRef: customerRef.trim(), type, assignedTo: assignTo })
-    setCustomerName(''); setCustomerRef(''); setType(''); setAssignTo(''); setFromPending(false)
+    addActivities({ customerName, customerRef: customerRef.trim(), types: [...types], assignedTo: assignTo })
+    // Keep the job (customer / reference / assignee) so more activities can be
+    // added for the same job; only clear the selected activity types.
+    setTypes(new Set())
+    setFromPending(false)
   }
 
   const master = myActiveActivity && db.activitiesMaster.find((a) => a.name === myActiveActivity.type)
@@ -260,13 +271,10 @@ export default function OperationsExecution() {
       {/* Add Activity — Admin / Supervisor */}
       {canAssign && (
         <div className="card">
-          <div className="card-title">➕ Add Activity {fromPending && <span className="badge badge-brand" style={{ marginLeft: 8, fontSize: 11 }}>From Pending Job</span>}</div>
-          {fromPending && (
-            <p style={{ color: 'var(--ink-400)', fontSize: 13, marginBottom: 8 }}>
-              Customer and reference are pre-filled from the forwarded job.{' '}
-              <button className="btn-link" style={{ fontSize: 13 }} onClick={() => { setFromPending(false); setCustomerName(''); setCustomerRef(''); setType('') }}>Clear</button>
-            </p>
-          )}
+          <div className="card-title">➕ Add Activities {fromPending && <span className="badge badge-brand" style={{ marginLeft: 8, fontSize: 11 }}>From Pending Job</span>}</div>
+          <p style={{ color: 'var(--ink-500)', fontSize: 13, marginBottom: 10 }}>
+            Pick the job once, then select one or more activities — each becomes a separate assigned task. After adding, the customer and reference stay so you can add more activities to the same job.
+          </p>
           <div className="form-grid">
             <Field label="Customer Name" required>
               <Select
@@ -289,23 +297,25 @@ export default function OperationsExecution() {
                 {(customer?.references || []).map((r) => <option key={r} value={r} />)}
               </datalist>
             </Field>
-            <Field label="Activity Type" required>
-              <Select
-                value={type}
-                onChange={setType}
-                options={db.activitiesMaster.map((a) => ({
-                  value: a.name,
-                  label: a.name + (a.storageType ? ` (${a.storageType})` : ''),
-                }))}
-                placeholder="Select activity…"
-              />
-            </Field>
             <Field label="Assign To" hint="Leave empty so any user can pick it up">
               <Select value={assignTo} onChange={setAssignTo} options={userOptions} placeholder="Any user (unassigned)" />
             </Field>
           </div>
-          <div className="row-end">
-            <button className="btn btn-primary" disabled={!canAddSubmit} onClick={handleAdd}>➕ Add Activity</button>
+          <Field label="Activities" required hint="Select one or more — one assigned task is created per activity">
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+              {db.activitiesMaster.map((a) => (
+                <label key={a.id} className="checkbox-row" style={{ border: '1px solid var(--ink-200)', borderRadius: 8, padding: '5px 10px' }}>
+                  <input type="checkbox" checked={types.has(a.name)} onChange={() => toggleType(a.name)} />
+                  {a.name}{a.storageType ? ` (${a.storageType})` : ''}
+                </label>
+              ))}
+            </div>
+          </Field>
+          <div className="spread" style={{ marginTop: 4 }}>
+            <button className="btn btn-ghost btn-sm" onClick={clearJob} disabled={!customerName && !customerRef && types.size === 0}>Clear</button>
+            <button className="btn btn-primary" disabled={!canAddSubmit} onClick={handleAdd}>
+              ➕ Add {types.size > 0 ? types.size : ''} Activit{types.size === 1 ? 'y' : 'ies'}
+            </button>
           </div>
         </div>
       )}

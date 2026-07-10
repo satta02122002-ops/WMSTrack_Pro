@@ -49,7 +49,7 @@ export default function PendingActivity({ setPage }) {
           <EmptyState
             icon="🕘"
             title="No pending activities"
-            hint="When someone ends an activity with Forward, the job appears here for the next step."
+            hint="Assign work directly on Operations Execution — pick a job and add one or more activities for it."
           />
         ) : (
           <div className="table-wrap">

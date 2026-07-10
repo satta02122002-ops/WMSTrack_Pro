@@ -527,6 +527,38 @@ export function StoreProvider({ children }) {
     [currentUser, update, logEntry, toast],
   )
 
+  // Add several activities at once for the same customer + reference — one
+  // assigned activity per selected type (same job, different activities).
+  const addActivities = useCallback(
+    ({ customerName, customerRef, types, assignedTo }) => {
+      if (!currentUser || !types?.length) return
+      const assignee = assignedTo ? dbRef.current.users.find((u) => u.userId === assignedTo) : null
+      const acts = types.map((type) => {
+        const master = dbRef.current.activitiesMaster.find((a) => a.name === type)
+        return {
+          id: uid('op'), customerName, customerRef, date: todayISO(),
+          type, storageType: master?.storageType || null, status: 'assigned',
+          startTime: null, endTime: null,
+          accumulatedSeconds: 0, lastResumeTime: null, durationSeconds: null,
+          qty: null, uom: null, cbm: null, storageTypeUsed: null,
+          handlingMode: null, vehicleType: null, truckCount: null, packageQty: null, packageUom: null,
+          assignedTo: assignedTo || null, assignedToName: assignee?.name || null,
+          owner: null, ownerName: null, participants: [], outcome: null,
+          createdBy: currentUser.userId, createdByName: currentUser.name,
+        }
+      })
+      update((d) =>
+        logEntry(currentUser.name, 'Assign Activity', 'Operations', `${types.join(', ')} for ${customerName} (${customerRef})${assignee ? ` → ${assignee.name}` : ' (unassigned)'}`)({
+          ...d,
+          operationsActivities: [...acts, ...d.operationsActivities],
+        }),
+      )
+      toast(`${acts.length} activit${acts.length === 1 ? 'y' : 'ies'} added${assignee ? ` for ${assignee.name}` : ''}`)
+      return acts
+    },
+    [currentUser, update, logEntry, toast],
+  )
+
   // A user picks up an assigned activity and begins executing it.
   const startAssignedActivity = useCallback(
     (id) => {
@@ -832,7 +864,7 @@ export function StoreProvider({ children }) {
       db: null, update: () => {}, upsert: () => {}, remove: () => {},
       session: null, currentUser: null, login, logout: () => {}, changePassword: async () => ({ ok: false }),
       isCheckedIn: false, needsCheckIn: false, attendanceRequired: false, todayAttendance: null, checkIn: () => {}, checkOut: () => {},
-      myActiveActivity: null, startActivity: () => {}, addActivity: () => {}, startAssignedActivity: () => {},
+      myActiveActivity: null, startActivity: () => {}, addActivity: () => {}, addActivities: () => {}, startAssignedActivity: () => {},
       pauseActivity: () => {}, resumeActivity: () => {},
       joinActivity: () => {}, leaveActivity: () => {}, endActivity: () => {},
       recordBilling: () => {}, unbillRecords: () => {}, billedMap: new Map(),
@@ -850,7 +882,7 @@ export function StoreProvider({ children }) {
     db, update, upsert, remove,
     session, currentUser, login, logout, changePassword,
     isCheckedIn, needsCheckIn, attendanceRequired, todayAttendance, checkIn, checkOut,
-    myActiveActivity, startActivity, addActivity, startAssignedActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, endActivity,
+    myActiveActivity, startActivity, addActivity, addActivities, startAssignedActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, endActivity,
     recordBilling, unbillRecords, billedMap,
     logAction, toast, toasts,
     prefill, setPrefill,
