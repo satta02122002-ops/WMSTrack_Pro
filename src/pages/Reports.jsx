@@ -1,21 +1,14 @@
 import React, { useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Select, EmptyState, StatusBadge } from '../components/ui.jsx'
-import { fmtDate, fmtDuration, fmtNum, num, round2, todayISO, toISODate, qtyDisplay } from '../utils.js'
+import { fmtDate, fmtDuration, fmtNum, num, round2, todayISO, qtyDisplay, monthKey, firstOfMonthISO } from '../utils.js'
 import { exportXlsx, exportCsv } from '../excel.js'
 import { computeBillingLines } from '../billing.js'
-import { monthKey } from '../utils.js'
-
-function firstOfMonth() {
-  const d = new Date()
-  d.setDate(1)
-  return toISODate(d)
-}
 
 export default function Reports() {
   const { db } = useStore()
   const [tab, setTab] = useState('operations')
-  const [from, setFrom] = useState(firstOfMonth())
+  const [from, setFrom] = useState(firstOfMonthISO())
   const [to, setTo] = useState(todayISO())
   const [customer, setCustomer] = useState('')
 

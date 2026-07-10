@@ -1,22 +1,53 @@
-import React, { useEffect, useState } from 'react'
+import React, { Component, Suspense, lazy, useEffect, useState } from 'react'
 import { useStore, pagesForUser } from './store.jsx'
 import Layout from './components/Layout.jsx'
 import Login from './pages/Login.jsx'
-import OperationsExecution from './pages/OperationsExecution.jsx'
-import PendingActivity from './pages/PendingActivity.jsx'
-import OperationsMonitor from './pages/OperationsMonitor.jsx'
-import StorageHandling from './pages/StorageHandling.jsx'
-import VAS from './pages/VAS.jsx'
-import Reports from './pages/Reports.jsx'
-import MonthlyBilling from './pages/MonthlyBilling.jsx'
-import MasterData from './pages/MasterData.jsx'
-import Parameter from './pages/Parameter.jsx'
-import Attendance from './pages/Attendance.jsx'
-import Productivity from './pages/Productivity.jsx'
-import Analytics from './pages/Analytics.jsx'
-import ActivityLog from './pages/ActivityLog.jsx'
-import Users from './pages/Users.jsx'
 import { EmptyState } from './components/ui.jsx'
+
+const OperationsExecution = lazy(() => import('./pages/OperationsExecution.jsx'))
+const PendingActivity = lazy(() => import('./pages/PendingActivity.jsx'))
+const OperationsMonitor = lazy(() => import('./pages/OperationsMonitor.jsx'))
+const StorageHandling = lazy(() => import('./pages/StorageHandling.jsx'))
+const VAS = lazy(() => import('./pages/VAS.jsx'))
+const Reports = lazy(() => import('./pages/Reports.jsx'))
+const MonthlyBilling = lazy(() => import('./pages/MonthlyBilling.jsx'))
+const MasterData = lazy(() => import('./pages/MasterData.jsx'))
+const Parameter = lazy(() => import('./pages/Parameter.jsx'))
+const Attendance = lazy(() => import('./pages/Attendance.jsx'))
+const Productivity = lazy(() => import('./pages/Productivity.jsx'))
+const Analytics = lazy(() => import('./pages/Analytics.jsx'))
+const ActivityLog = lazy(() => import('./pages/ActivityLog.jsx'))
+const Users = lazy(() => import('./pages/Users.jsx'))
+
+class ErrorBoundary extends Component {
+  state = { error: null }
+
+  static getDerivedStateFromError(error) {
+    return { error }
+  }
+
+  componentDidCatch(error, info) {
+    console.error('Uncaught error:', error, info.componentStack)
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '1rem', padding: 20 }}>
+          <h2 style={{ color: '#c00', margin: 0 }}>Something went wrong</h2>
+          <p style={{ color: '#666', maxWidth: 480, textAlign: 'center' }}>{this.state.error.message}</p>
+          <button
+            onClick={() => this.setState({ error: null })}
+            style={{ padding: '0.5rem 1.5rem', cursor: 'pointer', borderRadius: 8, border: '1px solid #ddd', background: '#fff' }}
+          >
+            Try Again
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 const PAGE_COMPONENTS = {
   operations: OperationsExecution,
@@ -35,11 +66,10 @@ const PAGE_COMPONENTS = {
   users: Users,
 }
 
-export default function App() {
+function AppInner() {
   const { currentUser, session, logout } = useStore()
   const [page, setPage] = useState('operations')
 
-  // Session references a user that was deleted/deactivated -> force logout
   useEffect(() => {
     if (session && (!currentUser || !currentUser.active)) logout(true)
   }, [session, currentUser, logout])
@@ -52,11 +82,21 @@ export default function App() {
 
   return (
     <Layout page={effectivePage} setPage={setPage}>
-      {PageComponent ? (
-        <PageComponent setPage={setPage} />
-      ) : (
-        <EmptyState icon="🔒" title="No accessible pages" hint="Ask an administrator to grant you page access." />
-      )}
+      <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><span style={{ color: 'var(--ink-400)' }}>Loading…</span></div>}>
+        {PageComponent ? (
+          <PageComponent setPage={setPage} />
+        ) : (
+          <EmptyState icon="🔒" title="No accessible pages" hint="Ask an administrator to grant you page access." />
+        )}
+      </Suspense>
     </Layout>
+  )
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppInner />
+    </ErrorBoundary>
   )
 }

@@ -8,8 +8,26 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PORT || 3001
 const app = express()
 
-app.use(cors())
-app.use(express.json({ limit: '50mb' }))
+// Security headers
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('X-XSS-Protection', '1; mode=block')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
+  next()
+})
+
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' ? false : true,
+}))
+app.use(express.json({ limit: '10mb' }))
+
+function validateAppData(data) {
+  return data && typeof data === 'object' && !Array.isArray(data)
+}
 
 app.get('/api/db', async (_req, res) => {
   try {
@@ -25,7 +43,7 @@ app.get('/api/db', async (_req, res) => {
 app.put('/api/db', async (req, res) => {
   try {
     const { data } = req.body
-    if (!data) return res.status(400).json({ error: 'Missing data' })
+    if (!validateAppData(data)) return res.status(400).json({ error: 'Missing or invalid data' })
     const version = await setState(data)
     res.json({ ok: true, version })
   } catch (err) {
@@ -34,10 +52,23 @@ app.put('/api/db', async (req, res) => {
   }
 })
 
+// POST /api/db — same as PUT; needed for navigator.sendBeacon which always sends POST
+app.post('/api/db', async (req, res) => {
+  try {
+    const { data } = req.body
+    if (!validateAppData(data)) return res.status(400).json({ error: 'Missing or invalid data' })
+    const version = await setState(data)
+    res.json({ ok: true, version })
+  } catch (err) {
+    console.error('POST /api/db error:', err)
+    res.status(500).json({ error: 'Failed to save database' })
+  }
+})
+
 app.post('/api/db/reset', async (req, res) => {
   try {
     const { data } = req.body
-    if (!data) return res.status(400).json({ error: 'Missing seed data' })
+    if (!validateAppData(data)) return res.status(400).json({ error: 'Missing or invalid seed data' })
     const version = await setState(data)
     res.json({ ok: true, version })
   } catch (err) {

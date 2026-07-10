@@ -205,11 +205,13 @@ function ManualActivityModal({ onClose }) {
 
 export default function OperationsMonitor() {
   const { db } = useStore()
+  const hasLive = db.operationsActivities.some((a) => a.status !== 'complete')
   const [, setTick] = useState(0)
   useEffect(() => {
+    if (!hasLive) return
     const t = setInterval(() => setTick((n) => n + 1), 1000)
     return () => clearInterval(t)
-  }, [])
+  }, [hasLive])
 
   const [from, setFrom] = useState(todayISO())
   const [to, setTo] = useState(todayISO())

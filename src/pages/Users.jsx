@@ -60,7 +60,7 @@ function UserModal({ record, onClose }) {
           <input type="text" value={r.userId} onChange={(e) => setR((s) => ({ ...s, userId: e.target.value }))} />
         </Field>
         <Field label={isNew ? 'Password' : 'Reset password'} required={isNew} hint={isNew ? 'Minimum 4 characters' : 'Leave empty to keep current password'}>
-          <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={isNew ? '' : '(unchanged)'} />
+          <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={isNew ? '' : '(unchanged)'} />
         </Field>
         <Field label="Role" required>
           <Select value={r.role} onChange={(v) => { setR((s) => ({ ...s, role: v })); if (!customAccess) setPages(new Set(ROLE_PAGES[v])) }} options={ROLES} />

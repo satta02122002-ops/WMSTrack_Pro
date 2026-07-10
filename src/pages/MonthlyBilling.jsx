@@ -97,6 +97,14 @@ export default function MonthlyBilling() {
 
   async function submitToApi() {
     if (!apiUrl) return
+    try {
+      const parsed = new URL(apiUrl)
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        return toast('API URL must use https:// or http://', 'error')
+      }
+    } catch {
+      return toast('Invalid API URL', 'error')
+    }
     setSubmitting(true)
     try {
       const payload = {

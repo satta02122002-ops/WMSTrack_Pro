@@ -16,6 +16,12 @@ export function todayISO() {
   return toISODate(new Date())
 }
 
+export function firstOfMonthISO() {
+  const d = new Date()
+  d.setDate(1)
+  return toISODate(d)
+}
+
 export function toISODate(d) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')

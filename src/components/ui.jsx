@@ -1,8 +1,14 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 
 export function Modal({ title, onClose, children, footer, wide }) {
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape') onClose?.() }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [onClose])
+
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div className={'modal' + (wide ? ' wide' : '')}>
         <div className="modal-head">
           <h3>{title}</h3>

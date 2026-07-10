@@ -52,7 +52,7 @@ function ChangePasswordModal({ onClose }) {
 }
 
 export default function Layout({ page, setPage, children }) {
-  const { currentUser, logout, isCheckedIn, needsCheckIn, todayAttendance, checkIn, checkOut, toasts } = useStore()
+  const { currentUser, logout, isCheckedIn, needsCheckIn, todayAttendance, checkIn, checkOut, toasts, saveStatus } = useStore()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [pwOpen, setPwOpen] = useState(false)
@@ -72,6 +72,9 @@ export default function Layout({ page, setPage, children }) {
           <small>Integrated Service Solutions</small>
         </div>
         <div className="header-spacer" />
+        <span className="save-indicator" title={saveStatus === 'saving' ? 'Saving changes...' : saveStatus === 'error' ? 'Save failed — retrying on next change' : 'All changes saved'}>
+          {saveStatus === 'saving' ? '...' : saveStatus === 'error' ? '!' : ''}
+        </span>
         <div className="header-user">
           <div className="name">{currentUser?.name}</div>
           <div className="role">

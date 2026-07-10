@@ -4,12 +4,13 @@ import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.
 import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
 import { activityDuration, fmtDuration, fmtTime, num } from '../utils.js'
 
-function useTick(intervalMs = 1000) {
+function useTick(active, intervalMs = 1000) {
   const [, setN] = useState(0)
   useEffect(() => {
+    if (!active) return
     const t = setInterval(() => setN((n) => n + 1), intervalMs)
     return () => clearInterval(t)
-  }, [intervalMs])
+  }, [active, intervalMs])
 }
 
 export function EndActivityModal({ activity, onClose }) {
@@ -152,7 +153,8 @@ export default function OperationsExecution() {
     startActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity,
     prefill, setPrefill, toast,
   } = useStore()
-  useTick()
+  const hasLive = !!myActiveActivity || db.operationsActivities.some((a) => a.status !== 'complete')
+  useTick(hasLive)
 
   const [customerName, setCustomerName] = useState('')
   const [customerRef, setCustomerRef] = useState('')

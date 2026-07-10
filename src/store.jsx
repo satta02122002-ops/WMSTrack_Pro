@@ -311,6 +311,7 @@ export function StoreProvider({ children }) {
   const [session, setSession] = useState(loadSession)
   const [toasts, setToasts] = useState([])
   const [prefill, setPrefill] = useState(null)
+  const [saveStatus, setSaveStatus] = useState('saved') // 'saved' | 'saving' | 'error'
   const dbRef = useRef(db)
   dbRef.current = db
   const saveTimerRef = useRef(null)
@@ -322,7 +323,7 @@ export function StoreProvider({ children }) {
     fetchDbFromApi()
       .then(({ data }) => {
         if (cancelled) return
-        if (data && data.version === 1) {
+        if (data && typeof data === 'object' && Array.isArray(data.users)) {
           setDb(data)
         } else {
           const seed = seedDb()
@@ -344,9 +345,15 @@ export function StoreProvider({ children }) {
   useEffect(() => {
     if (initialLoadRef.current || !db) return
 
+    setSaveStatus('saving')
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
-      saveDbToApi(db).catch((err) => console.error('Auto-save failed:', err))
+      saveDbToApi(db)
+        .then(() => setSaveStatus('saved'))
+        .catch((err) => {
+          console.error('Auto-save failed:', err)
+          setSaveStatus('error')
+        })
     }, 500)
 
     return () => {
@@ -774,6 +781,7 @@ export function StoreProvider({ children }) {
     prefill, setPrefill,
     pagesForUser, resetDb,
     storageDaysDefault: daysToMonthEnd,
+    saveStatus,
   }
 
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>

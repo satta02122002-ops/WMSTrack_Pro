@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, EmptyState, KPI } from '../components/ui.jsx'
-import { fmtDate, fmtTime, fmtNum, num, round2, todayISO, toISODate } from '../utils.js'
+import { fmtDate, fmtTime, fmtNum, num, round2, todayISO, firstOfMonthISO } from '../utils.js'
 import { exportXlsx } from '../excel.js'
 
 function EditAttendanceModal({ record, onClose }) {
@@ -31,15 +31,9 @@ function EditAttendanceModal({ record, onClose }) {
   )
 }
 
-function firstOfMonth() {
-  const d = new Date()
-  d.setDate(1)
-  return toISODate(d)
-}
-
 export default function Attendance() {
   const { db, currentUser, remove } = useStore()
-  const [from, setFrom] = useState(firstOfMonth())
+  const [from, setFrom] = useState(firstOfMonthISO())
   const [to, setTo] = useState(todayISO())
   const [userFilter, setUserFilter] = useState('')
   const [editRec, setEditRec] = useState(null)
