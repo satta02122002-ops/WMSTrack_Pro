@@ -106,11 +106,11 @@ function UnitValueModal({ record, onClose }) {
 
 function StorageRateModal({ record, onClose }) {
   const { db, upsert, toast } = useStore()
-  const [r, setR] = useState(record || { customer: '', storageType: 'Normal Storage', unitRate: '', currency: 'USD' })
+  const [r, setR] = useState(record || { customer: '', storageType: 'Normal Storage', unitRate: '', monthlyMinimum: '', currency: 'USD' })
   const valid = r.customer && r.storageType.trim() && num(r.unitRate) > 0
 
   function save() {
-    upsert('storageRates', { ...r, storageType: r.storageType.trim(), unitRate: num(r.unitRate) }, { entityType: 'Master Data', label: 'storage rate' })
+    upsert('storageRates', { ...r, storageType: r.storageType.trim(), unitRate: num(r.unitRate), monthlyMinimum: num(r.monthlyMinimum) }, { entityType: 'Master Data', label: 'storage rate' })
     toast('Storage rate saved')
     onClose()
   }
@@ -124,8 +124,11 @@ function StorageRateModal({ record, onClose }) {
       <Field label="Storage type" required hint="e.g. Normal Storage, Cold Storage, Bonded Storage">
         <input type="text" value={r.storageType} onChange={(e) => setR((s) => ({ ...s, storageType: e.target.value }))} />
       </Field>
-      <Field label="Rate per CBM per day" required>
+      <Field label="Rate per CBM per day" required hint="Storage is billed as rate × CBM × days stored">
         <input type="number" min="0" step="0.0001" value={r.unitRate} onChange={(e) => setR((s) => ({ ...s, unitRate: e.target.value }))} />
+      </Field>
+      <Field label="Monthly minimum charge" hint="Top-up added at billing if the month's storage total for this customer/type is below this. 0 = no minimum">
+        <input type="number" min="0" step="0.01" value={r.monthlyMinimum ?? ''} onChange={(e) => setR((s) => ({ ...s, monthlyMinimum: e.target.value }))} />
       </Field>
       <Field label="Currency" required>
         <Select value={r.currency} onChange={(v) => setR((s) => ({ ...s, currency: v }))} options={db.currencies.map((c) => c.name)} />
@@ -187,7 +190,7 @@ export default function MasterData() {
     let imported = 0, skipped = 0
     for (const row of rows) {
       if (!row.customer || !row.storageType || !num(row.unitRate)) { skipped++; continue }
-      upsert('storageRates', { customer: String(row.customer), storageType: String(row.storageType), unitRate: num(row.unitRate), currency: String(row.currency || 'USD') }, { entityType: 'Master Data', label: 'storage rate (import)' })
+      upsert('storageRates', { customer: String(row.customer), storageType: String(row.storageType), unitRate: num(row.unitRate), monthlyMinimum: num(row.monthlyMinimum), currency: String(row.currency || 'USD') }, { entityType: 'Master Data', label: 'storage rate (import)' })
       imported++
     }
     return { imported, skipped }
@@ -342,13 +345,14 @@ export default function MasterData() {
           {db.storageRates.length === 0 ? <EmptyState icon="🏬" title="No storage rates" hint="Storage In/Out billing needs a rate per customer and storage type." /> : (
             <div className="table-wrap">
               <table className="data">
-                <thead><tr><th>Customer</th><th>Storage Type</th><th className="num">Rate / CBM / day</th><th>Currency</th><th></th></tr></thead>
+                <thead><tr><th>Customer</th><th>Storage Type</th><th className="num">Rate / CBM / day</th><th className="num">Monthly Min</th><th>Currency</th><th></th></tr></thead>
                 <tbody>
                   {db.storageRates.map((r) => (
                     <tr key={r.id}>
                       <td><b>{r.customer}</b></td>
                       <td>{r.storageType}</td>
                       <td className="num">{fmtNum(r.unitRate, 4)}</td>
+                      <td className="num">{num(r.monthlyMinimum) > 0 ? fmtNum(r.monthlyMinimum) : '—'}</td>
                       <td>{r.currency}</td>
                       <td>
                         <div className="row" style={{ gap: 5, flexWrap: 'nowrap' }}>

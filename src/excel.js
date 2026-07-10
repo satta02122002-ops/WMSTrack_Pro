@@ -77,9 +77,9 @@ export const IMPORT_TEMPLATES = {
   },
   storageRates: {
     label: 'Storage Rates',
-    headers: ['customer', 'storageType', 'unitRate', 'currency'],
-    sample: [{ customer: 'Example Customer Ltd', storageType: 'Normal Storage', unitRate: 0.35, currency: 'USD' }],
-    note: 'rate is per CBM per day',
+    headers: ['customer', 'storageType', 'unitRate', 'monthlyMinimum', 'currency'],
+    sample: [{ customer: 'Example Customer Ltd', storageType: 'Normal Storage', unitRate: 0.35, monthlyMinimum: 0, currency: 'USD' }],
+    note: 'unitRate is per CBM per day; monthlyMinimum tops up the month if storage total is below it (0 = none)',
   },
   handlingRates: {
     label: 'Handling Rates',

@@ -5,7 +5,7 @@ import { monthKey, daysToMonthEnd, round2, num } from './utils.js'
  *
  * Sources:
  *  - Completed normal activities  -> qty x unit value (+ monthly minimum top-ups per customer/activity/UOM)
- *  - Storage movements            -> Storage In/Out: days x CBM x storage rate
+ *  - Storage movements            -> Storage In/Out: days x CBM x storage rate (+ monthly minimum top-ups per customer/storage type)
  *  - Storage movements (handling) -> Handling In/Out: trucks x rate (Container/Trailer) or CBM x rate (Loose)
  *  - Manual handling charges      -> Handling: qty x charge per unit (ad-hoc)
  *  - VAS charges                  -> qty x charge per unit
@@ -93,6 +93,7 @@ export function computeBillingLines(db, period) {
   // ---- 2 & 3. Storage movements -> storage + handling lines ----------------
   const movements = db.storageMovements.filter((m) => inPeriod(m.date))
   const handlingTotals = new Map() // customer -> total handling this month
+  const storageTotals = new Map() // `${customer}|${storageType}` -> total storage this month
   for (const m of movements) {
     const inbound = m.type === 'Inbound'
     const cur = customerCurrency(m.customer)
@@ -104,6 +105,9 @@ export function computeBillingLines(db, period) {
     const sr = db.storageRates.find((r) => r.customer === m.customer && r.storageType === m.storage)
     const days = m.storageDays != null && m.storageDays !== '' ? num(m.storageDays) : daysToMonthEnd(m.date)
     const sRate = sr ? num(sr.unitRate) : 0
+    const storageAmount = round2(days * num(m.cbm) * sRate) // rate/CBM/day × CBM × days
+    const stoKey = `${m.customer}|${m.storage}`
+    storageTotals.set(stoKey, round2((storageTotals.get(stoKey) || 0) + storageAmount))
     lines.push({
       id: `sto:${m.id}`,
       source: 'storage', reportType: 'Storage',
@@ -113,7 +117,7 @@ export function computeBillingLines(db, period) {
       cbmQty: num(m.cbm), packageQty: m.packageQty || '', packageUom: pkgUom, packageDetail: pkgDetail,
       currency: sr?.currency || cur,
       combinedRate: round2(days * sRate), // rate per CBM for the period
-      totalValue: round2(days * num(m.cbm) * sRate),
+      totalValue: storageAmount,
       storageDays: days, rateMissing: !sr,
     })
 
@@ -153,6 +157,26 @@ export function computeBillingLines(db, period) {
         cbmBasis: cbmBasis && m.handlingMode !== 'Loose',
       })
     }
+  }
+
+  // Storage monthly minimum top-ups (per customer + storage type)
+  for (const sr of db.storageRates) {
+    const min = num(sr.monthlyMinimum)
+    if (min <= 0) continue
+    const key = `${sr.customer}|${sr.storageType}`
+    if (!storageTotals.has(key)) continue // no storage of this type this month
+    const total = storageTotals.get(key)
+    if (total >= min) continue
+    lines.push({
+      id: `minsto:${sr.id}:${period}`,
+      source: 'minimum', reportType: 'Storage',
+      customerName: sr.customer, date: `${period}-01`, customerRef: '—',
+      activity: `${sr.storageType} — Monthly Minimum Adjustment`,
+      handlingType: '', vehicleType: '', truckCount: '',
+      cbmQty: '', packageQty: '', packageUom: '',
+      currency: sr.currency || customerCurrency(sr.customer),
+      combinedRate: min, totalValue: round2(min - total),
+    })
   }
 
   // Manual handling charges (ad-hoc, entered on the Storage & Handling page).
