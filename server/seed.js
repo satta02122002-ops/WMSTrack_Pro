@@ -89,7 +89,7 @@ export async function seedDb() {
 
   const db = {
     version: 1, createdAt: nowISO(), users, customers, activitiesMaster, uoms, currencies, vehicleTypes,
-    unitValues, storageRates, handlingRates, storageMovements: [], operationsActivities: [],
+    unitValues, storageRates, handlingRates, handlingCharges: [], storageMovements: [], operationsActivities: [],
     pendingAssignments: [], vasCharges: [], attendance: [], billedRecords: [], auditLog: [],
     settings: { billingApiUrl: '' },
   }

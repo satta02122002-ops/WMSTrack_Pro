@@ -3,7 +3,7 @@ import { useStore } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
 import ImportButton from '../components/ImportButton.jsx'
 import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
-import { fmtDate, fmtNum, num, todayISO, pkgDisplay } from '../utils.js'
+import { fmtDate, fmtNum, num, round2, todayISO, pkgDisplay } from '../utils.js'
 import { exportXlsx } from '../excel.js'
 
 function MovementModal({ movement, onClose }) {
@@ -175,11 +175,80 @@ export function HandlingRateModal({ rate, onClose }) {
   )
 }
 
+function ManualHandlingModal({ charge, onClose }) {
+  const { db, upsert, toast } = useStore()
+  const [h, setH] = useState(
+    charge || {
+      customerName: '', date: todayISO(), reference: '', description: '',
+      quantity: '1', charges: '', currency: '',
+    },
+  )
+  const set = (k) => (v) => setH((s) => ({ ...s, [k]: v }))
+  const setE = (k) => (e) => setH((s) => ({ ...s, [k]: e.target.value }))
+  const valid = h.customerName && h.date && h.description.trim() && num(h.quantity) > 0 && num(h.charges) > 0
+
+  function save() {
+    const cust = db.customers.find((c) => c.name === h.customerName)
+    upsert('handlingCharges', {
+      ...h,
+      description: h.description.trim(),
+      reference: (h.reference || '').trim(),
+      quantity: num(h.quantity), charges: num(h.charges),
+      currency: h.currency || cust?.currency || '',
+    }, { entityType: 'Handling', label: 'manual handling charge' })
+    toast('Manual handling charge saved')
+    onClose()
+  }
+
+  return (
+    <Modal
+      title={charge ? 'Edit Manual Handling Charge' : 'New Manual Handling Charge'}
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={!valid} onClick={save}>Save Charge</button>
+        </>
+      }
+    >
+      <div className="form-grid">
+        <Field label="Customer" required>
+          <Select value={h.customerName} onChange={(v) => setH((s) => ({ ...s, customerName: v, currency: db.customers.find((c) => c.name === v)?.currency || s.currency }))} options={db.customers.map((c) => c.name)} placeholder="Select…" />
+        </Field>
+        <Field label="Date" required>
+          <input type="date" value={h.date} onChange={setE('date')} />
+        </Field>
+        <Field label="Reference">
+          <input type="text" value={h.reference} onChange={setE('reference')} placeholder="e.g. PO / job ref" />
+        </Field>
+        <Field label="Description" required>
+          <input type="text" value={h.description} onChange={setE('description')} placeholder="e.g. Special repack handling" />
+        </Field>
+        <Field label="Quantity" required>
+          <input type="number" min="0" step="0.01" value={h.quantity} onChange={setE('quantity')} />
+        </Field>
+        <Field label="Charge per unit" required>
+          <input type="number" min="0" step="0.01" value={h.charges} onChange={setE('charges')} />
+        </Field>
+        <Field label="Currency" required>
+          <Select value={h.currency} onChange={set('currency')} options={db.currencies.map((c) => c.name)} placeholder="Select…" />
+        </Field>
+      </div>
+      <div className="row-end" style={{ marginTop: 8 }}>
+        <span style={{ fontSize: 13, color: 'var(--ink-500)' }}>
+          Total: <b>{fmtNum(round2(num(h.quantity) * num(h.charges)))}</b>
+        </span>
+      </div>
+    </Modal>
+  )
+}
+
 export default function StorageHandling() {
   const { db, remove, upsert } = useStore()
   const [tab, setTab] = useState('storage')
   const [movModal, setMovModal] = useState(null) // null | 'new' | movement
-  const [rateModal, setRateModal] = useState(null)
+  const [manualModal, setManualModal] = useState(null) // null | 'new' | charge
   const [fCustomer, setFCustomer] = useState('')
   const [fType, setFType] = useState('')
   const [fFrom, setFFrom] = useState('')
@@ -196,6 +265,11 @@ export default function StorageHandling() {
         )
         .sort((a, b) => b.date.localeCompare(a.date)),
     [db.storageMovements, fCustomer, fType, fFrom, fTo],
+  )
+
+  const manualCharges = useMemo(
+    () => [...(db.handlingCharges || [])].sort((a, b) => b.date.localeCompare(a.date)),
+    [db.handlingCharges],
   )
 
   function importMovements(rows) {
@@ -232,11 +306,11 @@ export default function StorageHandling() {
   return (
     <div>
       <h1 className="page-title">Storage &amp; Handling</h1>
-      <p className="page-sub">Storage movements (in/out) and customer handling rate configuration.</p>
+      <p className="page-sub">Storage movements (in/out) and ad-hoc manual handling charges. Handling rates are configured in Master Data.</p>
 
       <div className="tabs">
         <button className={'tab' + (tab === 'storage' ? ' active' : '')} onClick={() => setTab('storage')}>Storage Management</button>
-        <button className={'tab' + (tab === 'handling' ? ' active' : '')} onClick={() => setTab('handling')}>Handling Configuration</button>
+        <button className={'tab' + (tab === 'manual' ? ' active' : '')} onClick={() => setTab('manual')}>Manual Handling</button>
       </div>
 
       {tab === 'storage' && (
@@ -297,43 +371,38 @@ export default function StorageHandling() {
         </div>
       )}
 
-      {tab === 'handling' && (
+      {tab === 'manual' && (
         <div className="card">
           <div className="spread" style={{ marginBottom: 12 }}>
-            <div className="card-title" style={{ marginBottom: 0 }}>Customer Handling Rates</div>
-            <div className="row">
-              <button className="btn btn-sm btn-primary" onClick={() => setRateModal('new')}>＋ New Configuration</button>
-            </div>
+            <div className="card-title" style={{ marginBottom: 0 }}>Manual Handling Charges</div>
+            <button className="btn btn-sm btn-primary" onClick={() => setManualModal('new')}>＋ New Handling Charge</button>
           </div>
-          {db.handlingRates.length === 0 ? (
-            <EmptyState icon="🚛" title="No handling rates configured" hint="Configure per-customer container, trailer and loose handling rates." />
+          {manualCharges.length === 0 ? (
+            <EmptyState icon="🚛" title="No manual handling charges" hint="Add an ad-hoc handling charge when a job needs manual billing outside the movement-based handling rates. These flow into Reports and Monthly Billing as Handling." />
           ) : (
             <div className="table-wrap">
               <table className="data">
                 <thead>
                   <tr>
-                    <th>Customer</th><th className="num">Container 20ft</th><th className="num">Container 40ft</th>
-                    <th className="num">Trailer 20ft</th><th className="num">Trailer 40ft</th>
-                    <th className="num">Loose /CBM</th><th className="num">Min Charge</th><th className="num">Monthly Min</th><th>Billing Basis</th><th>Currency</th><th></th>
+                    <th>Date</th><th>Customer</th><th>Reference</th><th>Description</th>
+                    <th className="num">Qty</th><th className="num">Charge/Unit</th><th className="num">Total</th><th>Currency</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {db.handlingRates.map((r) => (
-                    <tr key={r.id}>
-                      <td><b>{r.customer}</b></td>
-                      <td className="num">{fmtNum(r.container20)}</td>
-                      <td className="num">{fmtNum(r.container40)}</td>
-                      <td className="num">{fmtNum(r.trailer20)}</td>
-                      <td className="num">{fmtNum(r.trailer40)}</td>
-                      <td className="num">{fmtNum(r.loosePerCbm)}</td>
-                      <td className="num">{fmtNum(r.minimumCharge)}</td>
-                      <td className="num">{fmtNum(r.monthlyMinimum)}</td>
-                      <td>{r.billByCbm ? <span className="badge badge-blue">ALWAYS PER CBM</span> : <span className="badge badge-gray">PER TRUCK / CBM</span>}</td>
-                      <td>{r.currency}</td>
+                  {manualCharges.map((h) => (
+                    <tr key={h.id}>
+                      <td>{fmtDate(h.date)}</td>
+                      <td><b>{h.customerName}</b></td>
+                      <td>{h.reference || '—'}</td>
+                      <td>{h.description}</td>
+                      <td className="num">{fmtNum(h.quantity)}</td>
+                      <td className="num">{fmtNum(h.charges)}</td>
+                      <td className="num"><b>{fmtNum(round2(num(h.quantity) * num(h.charges)))}</b></td>
+                      <td>{h.currency}</td>
                       <td>
                         <div className="row" style={{ gap: 5, flexWrap: 'nowrap' }}>
-                          <button className="btn btn-sm btn-ghost" onClick={() => setRateModal(r)}>Edit</button>
-                          <button className="btn btn-sm btn-danger" onClick={() => window.confirm('Delete handling rates for this customer?') && remove('handlingRates', r.id, { entityType: 'Master Data' })}>✕</button>
+                          <button className="btn btn-sm btn-ghost" onClick={() => setManualModal(h)}>Edit</button>
+                          <button className="btn btn-sm btn-danger" onClick={() => window.confirm('Delete this handling charge? Its billing line will disappear.') && remove('handlingCharges', h.id, { entityType: 'Handling' })}>✕</button>
                         </div>
                       </td>
                     </tr>
@@ -346,7 +415,7 @@ export default function StorageHandling() {
       )}
 
       {movModal && <MovementModal movement={movModal === 'new' ? null : movModal} onClose={() => setMovModal(null)} />}
-      {rateModal && <HandlingRateModal rate={rateModal === 'new' ? null : rateModal} onClose={() => setRateModal(null)} />}
+      {manualModal && <ManualHandlingModal charge={manualModal === 'new' ? null : manualModal} onClose={() => setManualModal(null)} />}
     </div>
   )
 }

@@ -7,6 +7,7 @@ import { monthKey, daysToMonthEnd, round2, num } from './utils.js'
  *  - Completed normal activities  -> qty x unit value (+ monthly minimum top-ups per customer/activity/UOM)
  *  - Storage movements            -> Storage In/Out: days x CBM x storage rate
  *  - Storage movements (handling) -> Handling In/Out: trucks x rate (Container/Trailer) or CBM x rate (Loose)
+ *  - Manual handling charges      -> Handling: qty x charge per unit (ad-hoc)
  *  - VAS charges                  -> qty x charge per unit
  *
  * Line ids are stable so billed status survives recomputation.
@@ -134,6 +135,24 @@ export function computeBillingLines(db, period) {
         cbmBasis: cbmBasis && m.handlingMode !== 'Loose',
       })
     }
+  }
+
+  // Manual handling charges (ad-hoc, entered on the Storage & Handling page).
+  // Billed as qty x charge and counted toward the customer's handling total so
+  // monthly-minimum top-ups account for them.
+  for (const h of (db.handlingCharges || []).filter((h) => inPeriod(h.date))) {
+    const amount = round2(num(h.quantity) * num(h.charges))
+    handlingTotals.set(h.customerName, round2((handlingTotals.get(h.customerName) || 0) + amount))
+    lines.push({
+      id: `manhan:${h.id}`,
+      source: 'handling', reportType: 'Handling',
+      customerName: h.customerName, date: h.date, customerRef: h.reference || '—',
+      activity: h.description ? `Manual Handling — ${h.description}` : 'Manual Handling',
+      handlingType: 'Manual', vehicleType: '', truckCount: '',
+      cbmQty: '', packageQty: h.quantity, packageUom: '',
+      currency: h.currency || customerCurrency(h.customerName),
+      combinedRate: num(h.charges), totalValue: amount,
+    })
   }
 
   // Handling monthly minimum top-ups
