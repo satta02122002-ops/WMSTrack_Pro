@@ -11,6 +11,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PORT || 3001
 const app = express()
 
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1)
+}
+
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'DENY')
