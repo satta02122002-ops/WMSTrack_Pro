@@ -1,14 +1,16 @@
 import express from 'express'
 import cors from 'cors'
+import rateLimit from 'express-rate-limit'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { getState, setState } from './db.js'
+import { hashPassword, verifyPassword, isLegacyHash, signToken, authMiddleware } from './auth.js'
+import { seedDb } from './seed.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PORT || 3001
 const app = express()
 
-// Security headers
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'DENY')
@@ -25,26 +27,177 @@ app.use(cors({
 }))
 app.use(express.json({ limit: '10mb' }))
 
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
 function validateAppData(data) {
   return data && typeof data === 'object' && !Array.isArray(data)
 }
 
-app.get('/api/db', async (_req, res) => {
+function stripPasswordHashes(data) {
+  if (!data?.users) return data
+  return {
+    ...data,
+    users: data.users.map(({ passwordHash, ...rest }) => rest),
+  }
+}
+
+async function preserveServerHashes(clientData) {
+  const current = await getState()
+  if (!current?.data?.users || !clientData.users) return clientData
+  const hashMap = new Map()
+  for (const u of current.data.users) {
+    if (u.passwordHash) hashMap.set(u.id, u.passwordHash)
+  }
+  return {
+    ...clientData,
+    users: clientData.users.map((u) => ({
+      ...u,
+      passwordHash: hashMap.get(u.id) || u.passwordHash || null,
+    })),
+  }
+}
+
+// ---- Auto-seed on startup ------------------------------------------------
+
+async function ensureSeeded() {
+  const state = await getState()
+  if (!state) {
+    console.log('Database is empty — seeding initial data...')
+    const data = await seedDb()
+    await setState(data)
+    console.log('Database seeded with demo data (4 default users)')
+  }
+}
+
+ensureSeeded().catch((err) => console.error('Auto-seed failed:', err))
+
+// ---- Auth endpoints (no middleware) ---------------------------------------
+
+app.post('/api/login', loginLimiter, async (req, res) => {
+  try {
+    const { userId, password } = req.body
+    if (!userId || !password) {
+      return res.status(400).json({ error: 'User ID and password are required' })
+    }
+
+    const state = await getState()
+    if (!state?.data?.users) {
+      return res.status(500).json({ error: 'Database not initialized' })
+    }
+
+    const user = state.data.users.find(
+      (u) => u.userId.toLowerCase() === String(userId).trim().toLowerCase(),
+    )
+    if (!user || !user.active) {
+      return res.status(401).json({ error: 'Invalid credentials. Please check your User ID and password.' })
+    }
+
+    const valid = await verifyPassword(password, user.passwordHash)
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid credentials. Please check your User ID and password.' })
+    }
+
+    if (isLegacyHash(user.passwordHash)) {
+      const bcryptHash = await hashPassword(password)
+      state.data.users = state.data.users.map((u) =>
+        u.id === user.id ? { ...u, passwordHash: bcryptHash } : u,
+      )
+      await setState(state.data)
+      console.log(`Upgraded password hash for user ${user.userId} from SHA-256 to bcrypt`)
+    }
+
+    const token = signToken({ id: user.id, userId: user.userId, role: user.role })
+    res.json({
+      ok: true,
+      token,
+      user: { id: user.id, userId: user.userId, name: user.name, role: user.role },
+    })
+  } catch (err) {
+    console.error('POST /api/login error:', err)
+    res.status(500).json({ error: 'Login failed' })
+  }
+})
+
+// ---- Protected endpoints --------------------------------------------------
+
+app.post('/api/change-password', authMiddleware, async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body
+    if (!oldPassword || !newPassword || newPassword.length < 4) {
+      return res.status(400).json({ error: 'Old password and new password (min 4 chars) are required' })
+    }
+
+    const state = await getState()
+    const user = state?.data?.users?.find((u) => u.id === req.user.id)
+    if (!user) return res.status(404).json({ error: 'User not found' })
+
+    const valid = await verifyPassword(oldPassword, user.passwordHash)
+    if (!valid) return res.status(401).json({ error: 'Current password is incorrect' })
+
+    const newHash = await hashPassword(newPassword)
+    state.data.users = state.data.users.map((u) =>
+      u.id === user.id ? { ...u, passwordHash: newHash } : u,
+    )
+    await setState(state.data)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('POST /api/change-password error:', err)
+    res.status(500).json({ error: 'Failed to change password' })
+  }
+})
+
+app.post('/api/set-user-password', authMiddleware, async (req, res) => {
+  try {
+    if (!['Admin', 'Developer'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only Admin or Developer can set user passwords' })
+    }
+
+    const { targetUserId, password } = req.body
+    if (!targetUserId || !password || password.length < 4) {
+      return res.status(400).json({ error: 'Target user ID and password (min 4 chars) are required' })
+    }
+
+    const state = await getState()
+    const user = state?.data?.users?.find(
+      (u) => u.userId.toLowerCase() === String(targetUserId).trim().toLowerCase(),
+    )
+    if (!user) return res.status(404).json({ error: 'User not found' })
+
+    const newHash = await hashPassword(password)
+    state.data.users = state.data.users.map((u) =>
+      u.id === user.id ? { ...u, passwordHash: newHash } : u,
+    )
+    await setState(state.data)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('POST /api/set-user-password error:', err)
+    res.status(500).json({ error: 'Failed to set password' })
+  }
+})
+
+app.get('/api/db', authMiddleware, async (_req, res) => {
   try {
     const state = await getState()
     if (!state) return res.json({ data: null, version: 0 })
-    res.json(state)
+    res.json({ data: stripPasswordHashes(state.data), version: state.version })
   } catch (err) {
     console.error('GET /api/db error:', err)
     res.status(500).json({ error: 'Failed to read database' })
   }
 })
 
-app.put('/api/db', async (req, res) => {
+app.put('/api/db', authMiddleware, async (req, res) => {
   try {
     const { data } = req.body
     if (!validateAppData(data)) return res.status(400).json({ error: 'Missing or invalid data' })
-    const version = await setState(data)
+    const merged = await preserveServerHashes(data)
+    const version = await setState(merged)
     res.json({ ok: true, version })
   } catch (err) {
     console.error('PUT /api/db error:', err)
@@ -52,12 +205,12 @@ app.put('/api/db', async (req, res) => {
   }
 })
 
-// POST /api/db — same as PUT; needed for navigator.sendBeacon which always sends POST
-app.post('/api/db', async (req, res) => {
+app.post('/api/db', authMiddleware, async (req, res) => {
   try {
     const { data } = req.body
     if (!validateAppData(data)) return res.status(400).json({ error: 'Missing or invalid data' })
-    const version = await setState(data)
+    const merged = await preserveServerHashes(data)
+    const version = await setState(merged)
     res.json({ ok: true, version })
   } catch (err) {
     console.error('POST /api/db error:', err)
@@ -65,19 +218,22 @@ app.post('/api/db', async (req, res) => {
   }
 })
 
-app.post('/api/db/reset', async (req, res) => {
+app.post('/api/db/reset', authMiddleware, async (req, res) => {
   try {
-    const { data } = req.body
-    if (!validateAppData(data)) return res.status(400).json({ error: 'Missing or invalid seed data' })
+    if (req.user.role !== 'Developer') {
+      return res.status(403).json({ error: 'Only Developer role can reset the database' })
+    }
+    const data = await seedDb()
     const version = await setState(data)
-    res.json({ ok: true, version })
+    res.json({ ok: true, version, data: stripPasswordHashes(data) })
   } catch (err) {
     console.error('POST /api/db/reset error:', err)
     res.status(500).json({ error: 'Failed to reset database' })
   }
 })
 
-// Serve static files in production
+// ---- Static files ---------------------------------------------------------
+
 const distDir = join(__dirname, '..', 'dist')
 app.use(express.static(distDir))
 app.get('*', (_req, res) => {

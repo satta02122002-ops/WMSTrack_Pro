@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { uid, sha256, todayISO, nowISO, toISODate, activityDuration, round2, num, daysToMonthEnd } from './utils.js'
+import { uid, todayISO, nowISO, toISODate, activityDuration, round2, num, daysToMonthEnd } from './utils.js'
 
 const SESSION_KEY = 'wmstrack_pro_session_v1'
 export const REMEMBER_KEY = 'wmstrack_pro_remember_uid'
@@ -42,228 +42,36 @@ export function pagesForUser(user) {
   return ROLE_PAGES[user.role] || []
 }
 
-// ---- Seed data -----------------------------------------------------------
+// ---- Token management ----------------------------------------------------
 
-const H = {
-  developer: '88fa0d759f845b47c044c2cd44e29082cf6fea665c30c146374ec7c8f3d699e3',
-  admin: '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918',
-  supervisor: '0834c2d60725ac5902257b3b78dd161ad26d1c0290dbf1e47cc14add5b8c8142',
-  user: '04f8996da763b7a969b1028ee3007569eaf3a635486ddab211d512c85b9df8fb',
+let _authToken = null
+
+function getToken() {
+  if (_authToken) return _authToken
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY))
+    return s?.token || null
+  } catch {
+    return null
+  }
 }
 
-function seedDb() {
-  const customers = [
-    { id: uid('cus'), name: 'Acme Trading Co', currency: 'USD', references: ['PO-1001', 'PO-1002', 'PO-1003'] },
-    { id: uid('cus'), name: 'Gulf Distribution LLC', currency: 'USD', references: ['GD-2201', 'GD-2202'] },
-    { id: uid('cus'), name: 'Nordwind Retail', currency: 'EUR', references: ['NW-88', 'NW-89'] },
-  ]
-  const activitiesMaster = [
-    { id: uid('act'), name: 'Picking', storageType: null },
-    { id: uid('act'), name: 'Packing', storageType: null },
-    { id: uid('act'), name: 'Labeling', storageType: null },
-    { id: uid('act'), name: 'Sorting', storageType: null },
-    { id: uid('act'), name: 'Kitting', storageType: null },
-    { id: uid('act'), name: 'Cycle Count', storageType: null },
-    { id: uid('act'), name: 'Offloading', storageType: 'inbound' },
-    { id: uid('act'), name: 'Loading', storageType: 'outbound' },
-  ]
-  const uoms = ['CTN', 'PLT', 'PCS', 'KG', 'CBM'].map((name) => ({ id: uid('uom'), name }))
-  const currencies = ['USD', 'EUR', 'SAR'].map((name) => ({ id: uid('cur'), name }))
-  const vehicleTypes = ['20ft', '40ft'].map((name) => ({ id: uid('veh'), name }))
-
-  const unitValues = []
-  // [customer, activity, uom, unitRate, currency, minimumCharge (per-job), minimumFixedValue (monthly)]
-  const uvSeed = [
-    ['Acme Trading Co', 'Picking', 'CTN', 0.45, 'USD', 10, 500],
-    ['Acme Trading Co', 'Picking', 'PLT', 4.5, 'USD', 15, 0],
-    ['Acme Trading Co', 'Picking', 'PCS', 0.05, 'USD', 5, 0],
-    ['Acme Trading Co', 'Packing', 'CTN', 0.55, 'USD', 10, 0],
-    ['Acme Trading Co', 'Labeling', 'PCS', 0.08, 'USD', 5, 0],
-    ['Acme Trading Co', 'Sorting', 'CTN', 0.3, 'USD', 8, 0],
-    ['Gulf Distribution LLC', 'Picking', 'CTN', 0.5, 'USD', 12, 0],
-    ['Gulf Distribution LLC', 'Packing', 'PLT', 4.5, 'USD', 15, 0],
-    ['Gulf Distribution LLC', 'Kitting', 'PCS', 0.12, 'USD', 5, 300],
-    ['Nordwind Retail', 'Picking', 'CTN', 0.4, 'EUR', 10, 0],
-    ['Nordwind Retail', 'Labeling', 'PCS', 0.07, 'EUR', 5, 0],
-    ['Nordwind Retail', 'Cycle Count', 'PLT', 2.0, 'EUR', 8, 0],
-  ]
-  for (const [customer, activity, uom, unitRate, currency, minimumCharge, minimumFixedValue] of uvSeed) {
-    unitValues.push({ id: uid('uv'), customer, activity, uom, unitRate, currency, minimumCharge, minimumFixedValue })
-  }
-
-  const storageRates = []
-  for (const c of customers) {
-    storageRates.push({ id: uid('sr'), customer: c.name, storageType: 'Normal Storage', unitRate: 0.35, currency: c.currency })
-    storageRates.push({ id: uid('sr'), customer: c.name, storageType: 'Cold Storage', unitRate: 0.85, currency: c.currency })
-  }
-
-  const handlingRates = customers.map((c) => ({
-    id: uid('hr'),
-    customer: c.name,
-    container20: 90,
-    container40: 140,
-    trailer20: 80,
-    trailer40: 120,
-    loosePerCbm: 3.5,
-    minimumCharge: 50,
-    monthlyMinimum: 0,
-    currency: c.currency,
-  }))
-  handlingRates[0].monthlyMinimum = 800
-
-  const users = [
-    { id: uid('usr'), name: 'System Developer', userId: 'developer', passwordHash: H.developer, role: 'Developer', active: true, allowedPages: null },
-    { id: uid('usr'), name: 'Warehouse Admin', userId: 'admin', passwordHash: H.admin, role: 'Admin', active: true, allowedPages: null },
-    { id: uid('usr'), name: 'Warehouse Supervisor', userId: 'supervisor', passwordHash: H.supervisor, role: 'Supervisor', active: true, allowedPages: null },
-    { id: uid('usr'), name: 'Warehouse Operator', userId: 'user', passwordHash: H.user, role: 'User', active: true, allowedPages: null },
-  ]
-
-  const db = {
-    version: 1,
-    createdAt: nowISO(),
-    users,
-    customers,
-    activitiesMaster,
-    uoms,
-    currencies,
-    vehicleTypes,
-    unitValues,
-    storageRates,
-    handlingRates,
-    storageMovements: [],
-    operationsActivities: [],
-    pendingAssignments: [],
-    vasCharges: [],
-    attendance: [],
-    billedRecords: [],
-    auditLog: [],
-    settings: { billingApiUrl: '' },
-  }
-  seedDemoTransactions(db)
-  db.auditLog.push({ id: uid('log'), dateTime: nowISO(), user: 'system', action: 'Seed', entityType: 'System', details: 'Initial database seeded with demo data' })
-  return db
+function setToken(token) {
+  _authToken = token
 }
 
-/** Seed a few weeks of realistic completed work so dashboards/billing have content on first run. */
-function seedDemoTransactions(db) {
-  const rng = mulberry32(20260704)
-  const users = [
-    { userId: 'user', name: 'Warehouse Operator' },
-    { userId: 'admin', name: 'Warehouse Admin' },
-  ]
-  const normals = db.activitiesMaster.filter((a) => !a.storageType)
-  const today = new Date()
-
-  for (let back = 21; back >= 1; back--) {
-    const d = new Date(today)
-    d.setDate(d.getDate() - back)
-    if (d.getDay() === 5) continue // weekly day off
-    const dateIso = toISODate(d)
-
-    // attendance
-    for (const u of users) {
-      const inH = 7 + Math.floor(rng() * 2)
-      const hours = 8 + rng() * 1.5
-      const ci = new Date(d); ci.setHours(inH, Math.floor(rng() * 50), 0, 0)
-      const co = new Date(ci.getTime() + hours * 3600 * 1000)
-      db.attendance.push({
-        id: uid('att'), userId: u.userId, userName: u.name, date: dateIso,
-        checkInTime: ci.toISOString(), checkOutTime: co.toISOString(), hoursReported: round2(hours),
-      })
-    }
-
-    // 2-4 normal activities per day
-    const nActs = 2 + Math.floor(rng() * 3)
-    for (let i = 0; i < nActs; i++) {
-      const cust = db.customers[Math.floor(rng() * db.customers.length)]
-      const act = normals[Math.floor(rng() * normals.length)]
-      const uv = db.unitValues.find((v) => v.customer === cust.name && v.activity === act.name)
-      const u = users[Math.floor(rng() * users.length)]
-      const durS = Math.round((0.5 + rng() * 2.5) * 3600)
-      const st = new Date(d); st.setHours(8 + i * 2, Math.floor(rng() * 40), 0, 0)
-      const en = new Date(st.getTime() + durS * 1000)
-      db.operationsActivities.push({
-        id: uid('op'), customerName: cust.name,
-        customerRef: cust.references[Math.floor(rng() * cust.references.length)],
-        date: dateIso, type: act.name, storageType: null, status: 'complete',
-        startTime: st.toISOString(), endTime: en.toISOString(),
-        accumulatedSeconds: durS, lastResumeTime: null, durationSeconds: durS,
-        qty: Math.round(20 + rng() * 300), uom: uv ? uv.uom : 'CTN',
-        cbm: null, storageTypeUsed: null, handlingMode: null, vehicleType: null,
-        truckCount: null, packageQty: null, packageUom: null,
-        owner: u.userId, ownerName: u.name, participants: [], outcome: 'finished',
-      })
-    }
-
-    // occasional offloading/loading with storage movement
-    if (rng() < 0.55) {
-      const inbound = rng() < 0.5
-      const act = db.activitiesMaster.find((a) => a.storageType === (inbound ? 'inbound' : 'outbound'))
-      const cust = db.customers[Math.floor(rng() * db.customers.length)]
-      const u = users[Math.floor(rng() * users.length)]
-      const cbm = round2(15 + rng() * 60)
-      const container = rng() < 0.7
-      const vehicleType = rng() < 0.5 ? '20ft' : '40ft'
-      const trucks = 1 + Math.floor(rng() * 2)
-      const durS = Math.round((0.75 + rng() * 1.5) * 3600)
-      const st = new Date(d); st.setHours(13, Math.floor(rng() * 40), 0, 0)
-      const en = new Date(st.getTime() + durS * 1000)
-      const ref = cust.references[Math.floor(rng() * cust.references.length)]
-      const opId = uid('op')
-      db.operationsActivities.push({
-        id: opId, customerName: cust.name, customerRef: ref, date: dateIso,
-        type: act.name, storageType: act.storageType, status: 'complete',
-        startTime: st.toISOString(), endTime: en.toISOString(),
-        accumulatedSeconds: durS, lastResumeTime: null, durationSeconds: durS,
-        qty: null, uom: null, cbm,
-        storageTypeUsed: rng() < 0.8 ? 'Normal Storage' : 'Cold Storage',
-        handlingMode: container ? 'Container' : 'Loose',
-        vehicleType: container ? vehicleType : null, truckCount: container ? trucks : null,
-        packageQty: Math.round(50 + rng() * 200), packageUom: 'CTN',
-        owner: u.userId, ownerName: u.name, participants: [], outcome: 'finished',
-      })
-      const op = db.operationsActivities[db.operationsActivities.length - 1]
-      db.storageMovements.push({
-        id: uid('mov'), customer: cust.name, date: dateIso, reference: ref,
-        type: inbound ? 'Inbound' : 'Outbound', cbm, storage: op.storageTypeUsed,
-        handlingMode: op.handlingMode, containerSize: op.vehicleType, truckCount: op.truckCount,
-        packageQty: op.packageQty, packageUom: op.packageUom,
-        storageDays: null, sourceActivityId: opId,
-      })
-    }
-
-    // occasional VAS
-    if (rng() < 0.3) {
-      const cust = db.customers[Math.floor(rng() * db.customers.length)]
-      db.vasCharges.push({
-        id: uid('vas'), customerName: cust.name, date: dateIso,
-        vasReference: `VAS-${dateIso.replaceAll('-', '')}`,
-        quantity: Math.round(5 + rng() * 40), charges: round2(1 + rng() * 4), currency: cust.currency,
-      })
-    }
-  }
-
-  // one forwarded pending job
-  const c0 = db.customers[0]
-  db.pendingAssignments.push({
-    id: uid('pnd'), customerName: c0.name, customerRef: c0.references[0], date: todayISO(),
-    status: 'Pending', lastActivityName: 'Picking', forwardedFromUser: 'Warehouse Admin', createdAt: nowISO(),
-  })
-}
-
-function mulberry32(a) {
-  return function () {
-    let t = (a += 0x6d2b79f5)
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
+function authHeaders() {
+  const token = getToken()
+  const h = { 'Content-Type': 'application/json' }
+  if (token) h['Authorization'] = `Bearer ${token}`
+  return h
 }
 
 // ---- API persistence layer -----------------------------------------------
 
 async function fetchDbFromApi() {
-  const res = await fetch(`${API_BASE}/db`)
+  const res = await fetch(`${API_BASE}/db`, { headers: authHeaders() })
+  if (res.status === 401) throw new Error('AUTH_EXPIRED')
   if (!res.ok) throw new Error(`API error: ${res.status}`)
   return res.json()
 }
@@ -271,20 +79,11 @@ async function fetchDbFromApi() {
 async function saveDbToApi(data) {
   const res = await fetch(`${API_BASE}/db`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify({ data }),
   })
+  if (res.status === 401) throw new Error('AUTH_EXPIRED')
   if (!res.ok) throw new Error(`API save error: ${res.status}`)
-  return res.json()
-}
-
-async function resetDbApi(data) {
-  const res = await fetch(`${API_BASE}/db/reset`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data }),
-  })
-  if (!res.ok) throw new Error(`API reset error: ${res.status}`)
   return res.json()
 }
 
@@ -311,32 +110,42 @@ export function StoreProvider({ children }) {
   const [session, setSession] = useState(loadSession)
   const [toasts, setToasts] = useState([])
   const [prefill, setPrefill] = useState(null)
-  const [saveStatus, setSaveStatus] = useState('saved') // 'saved' | 'saving' | 'error'
+  const [saveStatus, setSaveStatus] = useState('saved')
   const dbRef = useRef(db)
   dbRef.current = db
   const saveTimerRef = useRef(null)
   const initialLoadRef = useRef(true)
 
-  // Load database from API on mount
+  // Load database from API on mount (only if we have a token)
   useEffect(() => {
     let cancelled = false
+    const token = getToken()
+
+    if (!token) {
+      setDbReady(true)
+      return
+    }
+
     fetchDbFromApi()
       .then(({ data }) => {
         if (cancelled) return
         if (data && typeof data === 'object' && Array.isArray(data.users)) {
           setDb(data)
-        } else {
-          const seed = seedDb()
-          setDb(seed)
-          saveDbToApi(seed).catch((err) => console.error('Failed to save seed:', err))
         }
         setDbReady(true)
         setTimeout(() => { initialLoadRef.current = false }, 100)
       })
       .catch((err) => {
         if (cancelled) return
-        console.error('Failed to load from API:', err)
-        setDbError(err.message)
+        if (err.message === 'AUTH_EXPIRED') {
+          setToken(null)
+          setSession(null)
+          localStorage.removeItem(SESSION_KEY)
+          setDbReady(true)
+        } else {
+          console.error('Failed to load from API:', err)
+          setDbError(err.message)
+        }
       })
     return () => { cancelled = true }
   }, [])
@@ -352,6 +161,12 @@ export function StoreProvider({ children }) {
         .then(() => setSaveStatus('saved'))
         .catch((err) => {
           console.error('Auto-save failed:', err)
+          if (err.message === 'AUTH_EXPIRED') {
+            setToken(null)
+            setSession(null)
+            setDb(null)
+            localStorage.removeItem(SESSION_KEY)
+          }
           setSaveStatus('error')
         })
     }, 500)
@@ -365,7 +180,8 @@ export function StoreProvider({ children }) {
   useEffect(() => {
     const handleUnload = () => {
       if (!db || initialLoadRef.current) return
-      const blob = new Blob([JSON.stringify({ data: db })], { type: 'application/json' })
+      const token = getToken()
+      const blob = new Blob([JSON.stringify({ data: db, token })], { type: 'application/json' })
       navigator.sendBeacon(`${API_BASE}/db`, blob)
     }
     window.addEventListener('beforeunload', handleUnload)
@@ -390,7 +206,6 @@ export function StoreProvider({ children }) {
     })
   }, [])
 
-  /** Append an audit log entry (capped at 5000). Usable inside update() chains via returned patch. */
   const logEntry = useCallback((user, action, entityType, details) => {
     const entry = { id: uid('log'), dateTime: nowISO(), user, action, entityType, details }
     return (dbState) => {
@@ -416,42 +231,103 @@ export function StoreProvider({ children }) {
 
   const login = useCallback(
     async (userIdInput, password) => {
-      const hash = await sha256(password)
-      const u = dbRef.current.users.find((x) => x.userId.toLowerCase() === String(userIdInput || '').trim().toLowerCase())
-      if (!u || u.passwordHash !== hash || !u.active) {
-        return { ok: false, error: 'Invalid credentials. Please check your User ID and password.' }
+      try {
+        const res = await fetch(`${API_BASE}/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: String(userIdInput || '').trim(), password }),
+        })
+        const result = await res.json()
+        if (!res.ok || !result.ok) {
+          return { ok: false, error: result.error || 'Login failed' }
+        }
+
+        setToken(result.token)
+        const sess = {
+          userRecordId: result.user.id,
+          userId: result.user.userId,
+          name: result.user.name,
+          role: result.user.role,
+          loginAt: nowISO(),
+          token: result.token,
+        }
+        setSession(sess)
+
+        const dbRes = await fetchDbFromApi()
+        if (dbRes.data && typeof dbRes.data === 'object') {
+          setDb(dbRes.data)
+          initialLoadRef.current = false
+        }
+
+        return { ok: true }
+      } catch (err) {
+        console.error('Login error:', err)
+        return { ok: false, error: 'Connection error. Please try again.' }
       }
-      setSession({ userRecordId: u.id, userId: u.userId, name: u.name, role: u.role, loginAt: nowISO() })
-      update((d) => logEntry(u.name, 'Login', 'Auth', `User ${u.userId} logged in`)(d))
-      return { ok: true }
     },
-    [update, logEntry],
+    [],
   )
 
   const logout = useCallback(
     (silent = false) => {
-      if (session && !silent) update((d) => logEntry(session.name, 'Logout', 'Auth', `User ${session.userId} logged out`)(d))
-      setSession(null)
-      setPrefill(null)
+      if (session && !silent && db) {
+        update((d) => logEntry(session.name, 'Logout', 'Auth', `User ${session.userId} logged out`)(d))
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+        const currentDb = dbRef.current
+        if (currentDb) saveDbToApi(currentDb).catch(() => {})
+      }
+      setTimeout(() => {
+        setToken(null)
+        setSession(null)
+        setDb(null)
+        setPrefill(null)
+        initialLoadRef.current = true
+      }, 50)
     },
-    [session, update, logEntry],
+    [session, db, update, logEntry],
   )
 
   const changePassword = useCallback(
     async (oldPassword, newPassword) => {
       if (!currentUser) return { ok: false, error: 'Not logged in' }
-      const oldHash = await sha256(oldPassword)
-      if (currentUser.passwordHash !== oldHash) return { ok: false, error: 'Current password is incorrect' }
-      const newHash = await sha256(newPassword)
-      update((d) =>
-        logEntry(currentUser.name, 'Change Password', 'Auth', `User ${currentUser.userId} changed password`)({
-          ...d,
-          users: d.users.map((u) => (u.id === currentUser.id ? { ...u, passwordHash: newHash } : u)),
-        }),
-      )
-      return { ok: true }
+      try {
+        const res = await fetch(`${API_BASE}/change-password`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ oldPassword, newPassword }),
+        })
+        const result = await res.json()
+        if (!res.ok || !result.ok) {
+          return { ok: false, error: result.error || 'Failed to change password' }
+        }
+        return { ok: true }
+      } catch {
+        return { ok: false, error: 'Connection error. Please try again.' }
+      }
     },
-    [currentUser, update, logEntry],
+    [currentUser],
+  )
+
+  // ---- Admin user password management -------------------------------------
+
+  const setUserPassword = useCallback(
+    async (targetUserId, password) => {
+      try {
+        const res = await fetch(`${API_BASE}/set-user-password`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ targetUserId, password }),
+        })
+        const result = await res.json()
+        if (!res.ok || !result.ok) {
+          return { ok: false, error: result.error || 'Failed to set password' }
+        }
+        return { ok: true }
+      } catch {
+        return { ok: false, error: 'Connection error' }
+      }
+    },
+    [],
   )
 
   // ---- Attendance / daily gate --------------------------------------------
@@ -741,11 +617,22 @@ export function StoreProvider({ children }) {
 
   // ---- Danger zone -----------------------------------------------------------
 
-  const resetDb = useCallback(() => {
-    const fresh = seedDb()
-    setDb(fresh)
-    resetDbApi(fresh).catch((err) => console.error('Failed to reset on server:', err))
-    toast('Database reset to seed data', 'info')
+  const resetDb = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/db/reset`, {
+        method: 'POST',
+        headers: authHeaders(),
+      })
+      const result = await res.json()
+      if (!res.ok || !result.ok) {
+        toast(result.error || 'Failed to reset database', 'error')
+        return
+      }
+      if (result.data) setDb(result.data)
+      toast('Database reset to seed data', 'info')
+    } catch {
+      toast('Failed to reset database', 'error')
+    }
   }, [toast])
 
   // ---- Loading state ---------------------------------------------------------
@@ -761,7 +648,7 @@ export function StoreProvider({ children }) {
     )
   }
 
-  if (!dbReady || !db) {
+  if (!dbReady) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '1rem' }}>
         <div style={{ width: 40, height: 40, border: '4px solid #e0e0e0', borderTopColor: '#f0511c', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
@@ -769,6 +656,25 @@ export function StoreProvider({ children }) {
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>
     )
+  }
+
+  // Pre-login state: provide minimal context so Login page can render
+  if (!db) {
+    const loginValue = {
+      db: null, update: () => {}, upsert: () => {}, remove: () => {},
+      session: null, currentUser: null, login, logout: () => {}, changePassword: async () => ({ ok: false }),
+      isCheckedIn: false, needsCheckIn: false, todayAttendance: null, checkIn: () => {}, checkOut: () => {},
+      myActiveActivity: null, startActivity: () => {}, pauseActivity: () => {}, resumeActivity: () => {},
+      joinActivity: () => {}, leaveActivity: () => {}, endActivity: () => {},
+      recordBilling: () => {}, unbillRecords: () => {}, billedMap: new Map(),
+      logAction: () => {}, toast, toasts,
+      prefill: null, setPrefill: () => {},
+      pagesForUser, resetDb: () => {},
+      storageDaysDefault: daysToMonthEnd,
+      saveStatus: 'saved',
+      setUserPassword: async () => ({ ok: false }),
+    }
+    return <StoreCtx.Provider value={loginValue}>{children}</StoreCtx.Provider>
   }
 
   const value = {
@@ -782,6 +688,7 @@ export function StoreProvider({ children }) {
     pagesForUser, resetDb,
     storageDaysDefault: daysToMonthEnd,
     saveStatus,
+    setUserPassword,
   }
 
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>

@@ -1,10 +1,9 @@
 import React, { useState } from 'react'
 import { useStore, PAGES, ROLES, ROLE_PAGES } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
-import { sha256 } from '../utils.js'
 
 function UserModal({ record, onClose }) {
-  const { db, upsert, toast, logAction } = useStore()
+  const { db, upsert, toast, logAction, setUserPassword } = useStore()
   const [r, setR] = useState(
     record || { name: '', userId: '', role: 'User', active: true, allowedPages: null },
   )
@@ -33,8 +32,15 @@ function UserModal({ record, onClose }) {
       userId: r.userId.trim(),
       allowedPages: customAccess ? [...pages] : null,
     }
-    if (password) rec.passwordHash = await sha256(password)
     upsert('users', rec, { entityType: 'Users', label: 'user' })
+    if (password) {
+      try {
+        await setUserPassword(rec.userId, password)
+      } catch (e) {
+        toast(e.message || 'Failed to set password', 'error')
+        return
+      }
+    }
     logAction(isNew ? 'User Created' : 'User Edited', 'Users', `${rec.userId} (${rec.role})${password ? ' — password set' : ''}`)
     toast(isNew ? 'User created' : 'User updated')
     onClose()
