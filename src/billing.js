@@ -12,6 +12,22 @@ import { monthKey, daysToMonthEnd, round2, num } from './utils.js'
  *
  * Line ids are stable so billed status survives recomputation.
  */
+/**
+ * Price a manual handling charge from Master Data. The user only enters CBM
+ * (plus package info); the rate, minimum and currency come from the customer's
+ * configured handling rate (loose per-CBM basis). Returns zero when the
+ * customer has no handling rate configured.
+ */
+export function manualHandlingAmount(db, h) {
+  const hr = (db.handlingRates || []).find((r) => r.customer === h.customerName)
+  const rate = hr ? num(hr.loosePerCbm) : 0
+  const raw = round2(num(h.cbm) * rate)
+  const minCharge = hr ? num(hr.minimumCharge) : 0
+  const amount = Math.max(raw, minCharge)
+  const currency = hr?.currency || (db.customers || []).find((c) => c.name === h.customerName)?.currency || ''
+  return { rate, amount, minimumApplied: amount > raw, currency, rateMissing: !hr }
+}
+
 export function computeBillingLines(db, period) {
   const lines = []
   const inPeriod = (dateIso) => monthKey(dateIso) === period
@@ -140,20 +156,22 @@ export function computeBillingLines(db, period) {
   }
 
   // Manual handling charges (ad-hoc, entered on the Storage & Handling page).
-  // Billed as qty x charge and counted toward the customer's handling total so
-  // monthly-minimum top-ups account for them.
+  // Priced from Master Data (CBM x loose per-CBM rate, minimum applied) and
+  // counted toward the customer's handling total so monthly-minimum top-ups
+  // account for them.
   for (const h of (db.handlingCharges || []).filter((h) => inPeriod(h.date))) {
-    const amount = round2(num(h.quantity) * num(h.charges))
+    const { rate, amount, minimumApplied, currency, rateMissing } = manualHandlingAmount(db, h)
     handlingTotals.set(h.customerName, round2((handlingTotals.get(h.customerName) || 0) + amount))
     lines.push({
       id: `manhan:${h.id}`,
       source: 'handling', reportType: 'Handling',
       customerName: h.customerName, date: h.date, customerRef: h.reference || '—',
-      activity: h.description ? `Manual Handling — ${h.description}` : 'Manual Handling',
+      activity: 'Manual Handling',
       handlingType: 'Manual', vehicleType: '', truckCount: '',
-      cbmQty: '', packageQty: h.quantity, packageUom: '',
-      currency: h.currency || customerCurrency(h.customerName),
-      combinedRate: num(h.charges), totalValue: amount,
+      cbmQty: num(h.cbm), packageQty: h.packageQty || '', packageUom: h.packageUom || '',
+      currency,
+      combinedRate: rate, totalValue: amount,
+      minimumApplied, rateMissing,
     })
   }
 

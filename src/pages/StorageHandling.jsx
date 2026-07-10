@@ -3,8 +3,9 @@ import { useStore } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
 import ImportButton from '../components/ImportButton.jsx'
 import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
-import { fmtDate, fmtNum, num, round2, todayISO, pkgDisplay } from '../utils.js'
+import { fmtDate, fmtNum, num, todayISO, pkgDisplay } from '../utils.js'
 import { exportXlsx } from '../excel.js'
+import { manualHandlingAmount } from '../billing.js'
 
 function MovementModal({ movement, onClose }) {
   const { db, upsert, toast } = useStore()
@@ -188,23 +189,21 @@ export function HandlingRateModal({ rate, onClose }) {
 function ManualHandlingModal({ charge, onClose }) {
   const { db, upsert, toast } = useStore()
   const [h, setH] = useState(
-    charge || {
-      customerName: '', date: todayISO(), reference: '', description: '',
-      quantity: '1', charges: '', currency: '',
-    },
+    charge || { customerName: '', date: todayISO(), reference: '', cbm: '', packageQty: '', packageUom: '' },
   )
   const set = (k) => (v) => setH((s) => ({ ...s, [k]: v }))
   const setE = (k) => (e) => setH((s) => ({ ...s, [k]: e.target.value }))
-  const valid = h.customerName && h.date && h.description.trim() && num(h.quantity) > 0 && num(h.charges) > 0
+  const valid = h.customerName && h.date && num(h.cbm) > 0 && num(h.packageQty) > 0 && h.packageUom
+
+  const hasRate = h.customerName && db.handlingRates.some((r) => r.customer === h.customerName)
+  const preview = h.customerName && num(h.cbm) > 0 ? manualHandlingAmount(db, { ...h, cbm: num(h.cbm) }) : null
 
   function save() {
     const cust = db.customers.find((c) => c.name === h.customerName)
     upsert('handlingCharges', {
-      ...h,
-      description: h.description.trim(),
-      reference: (h.reference || '').trim(),
-      quantity: num(h.quantity), charges: num(h.charges),
-      currency: h.currency || cust?.currency || '',
+      customerName: h.customerName, date: h.date, reference: (h.reference || '').trim(),
+      cbm: num(h.cbm), packageQty: num(h.packageQty), packageUom: h.packageUom,
+      currency: cust?.currency || '',
     }, { entityType: 'Handling', label: 'manual handling charge' })
     toast('Manual handling charge saved')
     onClose()
@@ -224,7 +223,7 @@ function ManualHandlingModal({ charge, onClose }) {
     >
       <div className="form-grid">
         <Field label="Customer" required>
-          <Select value={h.customerName} onChange={(v) => setH((s) => ({ ...s, customerName: v, currency: db.customers.find((c) => c.name === v)?.currency || s.currency }))} options={db.customers.map((c) => c.name)} placeholder="Select…" />
+          <Select value={h.customerName} onChange={set('customerName')} options={db.customers.map((c) => c.name)} placeholder="Select…" />
         </Field>
         <Field label="Date" required>
           <input type="date" value={h.date} onChange={setE('date')} />
@@ -232,24 +231,29 @@ function ManualHandlingModal({ charge, onClose }) {
         <Field label="Reference">
           <input type="text" value={h.reference} onChange={setE('reference')} placeholder="e.g. PO / job ref" />
         </Field>
-        <Field label="Description" required>
-          <input type="text" value={h.description} onChange={setE('description')} placeholder="e.g. Special repack handling" />
+        <Field label="CBM" required>
+          <input type="number" min="0" step="0.01" value={h.cbm} onChange={setE('cbm')} />
         </Field>
-        <Field label="Quantity" required>
-          <input type="number" min="0" step="0.01" value={h.quantity} onChange={setE('quantity')} />
+        <Field label="Package Qty" required>
+          <input type="number" min="0" step="0.01" value={h.packageQty} onChange={setE('packageQty')} />
         </Field>
-        <Field label="Charge per unit" required>
-          <input type="number" min="0" step="0.01" value={h.charges} onChange={setE('charges')} />
-        </Field>
-        <Field label="Currency" required>
-          <Select value={h.currency} onChange={set('currency')} options={db.currencies.map((c) => c.name)} placeholder="Select…" />
+        <Field label="Package UOM" required>
+          <Select value={h.packageUom} onChange={set('packageUom')} options={db.uoms.map((u) => u.name)} placeholder="Select…" />
         </Field>
       </div>
-      <div className="row-end" style={{ marginTop: 8 }}>
-        <span style={{ fontSize: 13, color: 'var(--ink-500)' }}>
-          Total: <b>{fmtNum(round2(num(h.quantity) * num(h.charges)))}</b>
-        </span>
-      </div>
+      {h.customerName && !hasRate && (
+        <div style={{ marginTop: 4, padding: '10px 12px', background: 'var(--red-50, #fef2f2)', border: '1px solid #fecaca', borderRadius: 8, fontSize: 13, color: 'var(--red-600)' }}>
+          ⚠ No handling rate is configured for <b>{h.customerName}</b> in Master Data. Add one under Master Data → Handling Rates, or the charge will be 0.
+        </div>
+      )}
+      {preview && hasRate && (
+        <div style={{ marginTop: 4, padding: '10px 12px', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', borderRadius: 8, fontSize: 13 }}>
+          Rate <b>{fmtNum(preview.rate)}</b> / CBM × <b>{fmtNum(num(h.cbm))}</b> CBM ={' '}
+          <b>{fmtNum(preview.amount)} {preview.currency}</b>
+          {preview.minimumApplied && <span style={{ color: 'var(--ink-500)' }}> (minimum charge applied)</span>}
+          <div style={{ color: 'var(--ink-500)', marginTop: 2 }}>Rate, minimum and currency come from Master Data handling configuration.</div>
+        </div>
+      )}
     </Modal>
   )
 }
@@ -303,13 +307,15 @@ export default function StorageHandling() {
   function importManualHandling(rows) {
     let imported = 0, skipped = 0
     for (const row of rows) {
-      if (!row.customer || !row.date || !row.description || !num(row.quantity) || !num(row.charges)) { skipped++; continue }
+      if (!row.customer || !row.date || !num(row.cbm)) { skipped++; continue }
       const cust = db.customers.find((c) => c.name === String(row.customer))
       upsert('handlingCharges', {
         customerName: String(row.customer), date: String(row.date).slice(0, 10),
-        reference: String(row.reference || ''), description: String(row.description),
-        quantity: num(row.quantity), charges: num(row.charges),
-        currency: String(row.currency || '') || cust?.currency || '',
+        reference: String(row.reference || ''),
+        cbm: num(row.cbm),
+        packageQty: row.packageQty === '' || row.packageQty == null ? null : num(row.packageQty),
+        packageUom: row.packageUom || '',
+        currency: cust?.currency || '',
       }, { entityType: 'Handling', label: 'manual handling charge (import)' })
       imported++
     }
@@ -334,11 +340,14 @@ export default function StorageHandling() {
   function exportManualHandling() {
     exportXlsx(
       'manual_handling_charges.xlsx',
-      manualCharges.map((h) => ({
-        Date: h.date, Customer: h.customerName, Reference: h.reference || '',
-        Description: h.description, Quantity: h.quantity, 'Charge/Unit': h.charges,
-        Total: round2(num(h.quantity) * num(h.charges)), Currency: h.currency,
-      })),
+      manualCharges.map((h) => {
+        const calc = manualHandlingAmount(db, h)
+        return {
+          Date: h.date, Customer: h.customerName, Reference: h.reference || '',
+          CBM: h.cbm, 'Package Qty': h.packageQty ?? '', 'Package UOM': h.packageUom || '',
+          'Rate/CBM': calc.rate, Total: calc.amount, Currency: calc.currency,
+        }
+      }),
       'Manual Handling',
     )
   }
@@ -422,35 +431,43 @@ export default function StorageHandling() {
             </div>
           </div>
           {manualCharges.length === 0 ? (
-            <EmptyState icon="🚛" title="No manual handling charges" hint="Add an ad-hoc handling charge when a job needs manual billing outside the movement-based handling rates. These flow into Reports and Monthly Billing as Handling." />
+            <EmptyState icon="🚛" title="No manual handling charges" hint="Enter CBM and package details; the handling rate and charge are pulled automatically from the customer's Master Data handling configuration. These flow into Reports and Monthly Billing as Handling." />
           ) : (
             <div className="table-wrap">
               <table className="data">
                 <thead>
                   <tr>
-                    <th>Date</th><th>Customer</th><th>Reference</th><th>Description</th>
-                    <th className="num">Qty</th><th className="num">Charge/Unit</th><th className="num">Total</th><th>Currency</th><th></th>
+                    <th>Date</th><th>Customer</th><th>Reference</th>
+                    <th className="num">CBM</th><th className="num">Pkg Qty</th><th>Pkg UOM</th>
+                    <th className="num">Rate/CBM</th><th className="num">Total</th><th>Currency</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {manualCharges.map((h) => (
-                    <tr key={h.id}>
-                      <td>{fmtDate(h.date)}</td>
-                      <td><b>{h.customerName}</b></td>
-                      <td>{h.reference || '—'}</td>
-                      <td>{h.description}</td>
-                      <td className="num">{fmtNum(h.quantity)}</td>
-                      <td className="num">{fmtNum(h.charges)}</td>
-                      <td className="num"><b>{fmtNum(round2(num(h.quantity) * num(h.charges)))}</b></td>
-                      <td>{h.currency}</td>
-                      <td>
-                        <div className="row" style={{ gap: 5, flexWrap: 'nowrap' }}>
-                          <button className="btn btn-sm btn-ghost" onClick={() => setManualModal(h)}>Edit</button>
-                          <button className="btn btn-sm btn-danger" onClick={() => window.confirm('Delete this handling charge? Its billing line will disappear.') && remove('handlingCharges', h.id, { entityType: 'Handling' })}>✕</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {manualCharges.map((h) => {
+                    const calc = manualHandlingAmount(db, h)
+                    return (
+                      <tr key={h.id}>
+                        <td>{fmtDate(h.date)}</td>
+                        <td><b>{h.customerName}</b></td>
+                        <td>{h.reference || '—'}</td>
+                        <td className="num">{fmtNum(h.cbm)}</td>
+                        <td className="num">{h.packageQty != null && h.packageQty !== '' ? fmtNum(h.packageQty) : '—'}</td>
+                        <td>{h.packageUom || '—'}</td>
+                        <td className="num">{fmtNum(calc.rate)}</td>
+                        <td className="num">
+                          <b>{fmtNum(calc.amount)}</b>
+                          {calc.rateMissing && <span className="badge badge-red" style={{ marginLeft: 6 }}>NO RATE</span>}
+                        </td>
+                        <td>{calc.currency}</td>
+                        <td>
+                          <div className="row" style={{ gap: 5, flexWrap: 'nowrap' }}>
+                            <button className="btn btn-sm btn-ghost" onClick={() => setManualModal(h)}>Edit</button>
+                            <button className="btn btn-sm btn-danger" onClick={() => window.confirm('Delete this handling charge? Its billing line will disappear.') && remove('handlingCharges', h.id, { entityType: 'Handling' })}>✕</button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

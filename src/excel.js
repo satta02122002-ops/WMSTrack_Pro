@@ -95,9 +95,9 @@ export const IMPORT_TEMPLATES = {
   },
   handlingCharges: {
     label: 'Manual Handling Charges',
-    headers: ['customer', 'date', 'reference', 'description', 'quantity', 'charges', 'currency'],
-    sample: [{ customer: 'Example Customer Ltd', date: '2026-07-01', reference: 'JOB-001', description: 'Special repack handling', quantity: 3, charges: 20, currency: 'USD' }],
-    note: 'customer must match an existing customer; total billed = quantity x charges; date in YYYY-MM-DD',
+    headers: ['customer', 'date', 'reference', 'cbm', 'packageQty', 'packageUom'],
+    sample: [{ customer: 'Example Customer Ltd', date: '2026-07-01', reference: 'JOB-001', cbm: 25, packageQty: 100, packageUom: 'CTN' }],
+    note: 'customer must have a handling rate in Master Data; charge = CBM x loose per-CBM rate (minimum applied); date in YYYY-MM-DD',
   },
 }
 
