@@ -1,47 +1,45 @@
-import Database from 'better-sqlite3'
-import { mkdirSync } from 'fs'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
+import pg from 'pg'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const DATA_DIR = process.env.DATA_DIR || join(__dirname, '..', 'data')
-const DB_PATH = join(DATA_DIR, 'logitrack.db')
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL?.includes('render.com')
+    ? { rejectUnauthorized: false }
+    : false,
+})
 
-mkdirSync(DATA_DIR, { recursive: true })
+let initialized = false
 
-const sqlite = new Database(DB_PATH)
-sqlite.pragma('journal_mode = WAL')
-
-sqlite.exec(`
-  CREATE TABLE IF NOT EXISTS app_state (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    data TEXT NOT NULL,
-    version INTEGER NOT NULL DEFAULT 1,
-    updated_at TEXT NOT NULL
-  )
-`)
-
-const getStmt = sqlite.prepare('SELECT data, version, updated_at FROM app_state WHERE id = 1')
-const insertStmt = sqlite.prepare(
-  'INSERT INTO app_state (id, data, version, updated_at) VALUES (1, ?, 1, ?)',
-)
-const updateStmt = sqlite.prepare(
-  'UPDATE app_state SET data = ?, version = version + 1, updated_at = ? WHERE id = 1',
-)
-
-export function getState() {
-  const row = getStmt.get()
-  if (!row) return null
-  return { data: JSON.parse(row.data), version: row.version }
+async function init() {
+  if (initialized) return
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      data JSONB NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  initialized = true
 }
 
-export function setState(data) {
-  const now = new Date().toISOString()
-  const existing = getStmt.get()
-  if (!existing) {
-    insertStmt.run(JSON.stringify(data), now)
-  } else {
-    updateStmt.run(JSON.stringify(data), now)
-  }
-  return getStmt.get().version
+export async function getState() {
+  await init()
+  const { rows } = await pool.query('SELECT data, version FROM app_state WHERE id = 1')
+  if (!rows.length) return null
+  return { data: rows[0].data, version: rows[0].version }
+}
+
+export async function setState(data) {
+  await init()
+  const { rows } = await pool.query(
+    `INSERT INTO app_state (id, data, version, updated_at)
+     VALUES (1, $1, 1, NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       data = $1,
+       version = app_state.version + 1,
+       updated_at = NOW()
+     RETURNING version`,
+    [JSON.stringify(data)],
+  )
+  return rows[0].version
 }

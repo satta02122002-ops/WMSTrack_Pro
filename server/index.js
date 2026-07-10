@@ -11,9 +11,9 @@ const app = express()
 app.use(cors())
 app.use(express.json({ limit: '50mb' }))
 
-app.get('/api/db', (_req, res) => {
+app.get('/api/db', async (_req, res) => {
   try {
-    const state = getState()
+    const state = await getState()
     if (!state) return res.json({ data: null, version: 0 })
     res.json(state)
   } catch (err) {
@@ -22,11 +22,11 @@ app.get('/api/db', (_req, res) => {
   }
 })
 
-app.put('/api/db', (req, res) => {
+app.put('/api/db', async (req, res) => {
   try {
     const { data } = req.body
     if (!data) return res.status(400).json({ error: 'Missing data' })
-    const version = setState(data)
+    const version = await setState(data)
     res.json({ ok: true, version })
   } catch (err) {
     console.error('PUT /api/db error:', err)
@@ -34,11 +34,11 @@ app.put('/api/db', (req, res) => {
   }
 })
 
-app.post('/api/db/reset', (req, res) => {
+app.post('/api/db/reset', async (req, res) => {
   try {
     const { data } = req.body
     if (!data) return res.status(400).json({ error: 'Missing seed data' })
-    const version = setState(data)
+    const version = await setState(data)
     res.json({ ok: true, version })
   } catch (err) {
     console.error('POST /api/db/reset error:', err)
