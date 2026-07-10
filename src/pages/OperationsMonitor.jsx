@@ -129,7 +129,7 @@ function ManualActivityModal({ onClose }) {
         <Field label="Customer Name" required>
           <Select value={customerName} onChange={(v) => { setCustomerName(v); setCustomerRef('') }} options={db.customers.map((c) => c.name)} placeholder="Select…" />
         </Field>
-        <Field label="Customer Reference" required>
+        <Field label="Customer Reference No" required>
           <input type="text" list="manual-ref-opts" value={customerRef} onChange={(e) => setCustomerRef(e.target.value)} placeholder="e.g. PO-1001" disabled={!customerName} />
           <datalist id="manual-ref-opts">
             {(customer?.references || []).map((r) => <option key={r} value={r} />)}
@@ -172,8 +172,8 @@ function ManualActivityModal({ onClose }) {
             <Field label="Storage Type" required>
               <Select value={storageTypeUsed} onChange={setStorageTypeUsed} options={storageTypes} placeholder="Select…" />
             </Field>
-            <Field label="Handling Mode" required>
-              <Select value={handlingMode} onChange={setHandlingMode} options={['Container', 'Trailer', 'Loose']} placeholder="Select…" />
+            <Field label="Handling Type" required>
+              <Select value={handlingMode} onChange={setHandlingMode} options={['Container', 'Trailer', 'Loose']} placeholder="Select handling…" />
             </Field>
             {needsVehicle && (
               <>
@@ -204,7 +204,8 @@ function ManualActivityModal({ onClose }) {
 }
 
 export default function OperationsMonitor() {
-  const { db } = useStore()
+  const { db, currentUser } = useStore()
+  const canManual = ['Admin', 'Supervisor', 'Developer'].includes(currentUser.role)
   const hasLive = db.operationsActivities.some((a) => a.status !== 'complete')
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -282,7 +283,7 @@ export default function OperationsMonitor() {
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
             <Select value={customer} onChange={setCustomer} options={db.customers.map((c) => c.name)} placeholder="All customers" style={{ width: 180 }} />
-            <button className="btn btn-primary btn-sm" onClick={() => setManualOpen(true)}>+ Manual Entry</button>
+            {canManual && <button className="btn btn-primary btn-sm" onClick={() => setManualOpen(true)}>+ Manual Entry</button>}
             <button className="btn btn-outline btn-sm" onClick={exportHistory} disabled={!history.length}>⬇ Excel</button>
           </div>
         </div>
@@ -320,7 +321,7 @@ export default function OperationsMonitor() {
         )}
       </div>
 
-      {manualOpen && <ManualActivityModal onClose={() => setManualOpen(false)} />}
+      {manualOpen && canManual && <ManualActivityModal onClose={() => setManualOpen(false)} />}
     </div>
   )
 }
