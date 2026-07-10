@@ -210,3 +210,45 @@ export function computeBillingLines(db, period) {
   lines.sort((a, b) => (a.customerName + a.date).localeCompare(b.customerName + b.date))
   return lines
 }
+
+/** List of 'YYYY-MM' months touched by an inclusive from..to date range. */
+export function monthsInRange(from, to) {
+  const months = []
+  let y = Number(from.slice(0, 4))
+  let m = Number(from.slice(5, 7))
+  const endY = Number(to.slice(0, 4))
+  const endM = Number(to.slice(5, 7))
+  while (y < endY || (y === endY && m <= endM)) {
+    months.push(`${y}-${String(m).padStart(2, '0')}`)
+    m++
+    if (m > 12) { m = 1; y++ }
+  }
+  return months
+}
+
+/**
+ * Billable lines across an arbitrary from..to date range (inclusive).
+ * Transactional lines are filtered to their exact date; monthly-minimum
+ * top-ups (which are a whole-month concept) are only included for months the
+ * range fully covers, so a partial-month selection never bills a full minimum.
+ */
+export function computeBillingLinesRange(db, from, to) {
+  if (!from || !to || from > to) return []
+  const monthFullyCovered = (period) => {
+    const [y, m] = period.split('-').map(Number)
+    const lastDay = new Date(y, m, 0).getDate()
+    return from <= `${period}-01` && to >= `${period}-${String(lastDay).padStart(2, '0')}`
+  }
+  const out = []
+  for (const period of monthsInRange(from, to)) {
+    for (const l of computeBillingLines(db, period)) {
+      if (l.source === 'minimum') {
+        if (monthFullyCovered(period)) out.push(l)
+      } else if (l.date >= from && l.date <= to) {
+        out.push(l)
+      }
+    }
+  }
+  out.sort((a, b) => (a.customerName + a.date).localeCompare(b.customerName + b.date))
+  return out
+}

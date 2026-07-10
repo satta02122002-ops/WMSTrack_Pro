@@ -1,15 +1,16 @@
 import React, { useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, EmptyState, StatusBadge } from '../components/ui.jsx'
-import { fmtDate, fmtNum, num, round2, monthName, todayISO } from '../utils.js'
-import { computeBillingLines } from '../billing.js'
+import { fmtDate, fmtNum, num, round2, todayISO } from '../utils.js'
+import { computeBillingLinesRange } from '../billing.js'
 import { exportXlsx } from '../excel.js'
 
 export default function MonthlyBilling() {
   const { db, billedMap, recordBilling, unbillRecords, update, toast, session } = useStore()
   const now = new Date()
-  const [year, setYear] = useState(now.getFullYear())
-  const [month, setMonth] = useState(now.getMonth() + 1)
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const [from, setFrom] = useState(monthStart)
+  const [to, setTo] = useState(todayISO())
   const [customer, setCustomer] = useState('')
   const [reportType, setReportType] = useState('')
   const [billStatus, setBillStatus] = useState('')
@@ -21,9 +22,10 @@ export default function MonthlyBilling() {
   const [apiUrl, setApiUrl] = useState(db.settings?.billingApiUrl || '')
   const [submitting, setSubmitting] = useState(false)
 
-  const period = `${year}-${String(month).padStart(2, '0')}`
+  const rangeKey = `${from}..${to}`
+  const rangeLabel = `${fmtDate(from)} – ${fmtDate(to)}`
 
-  const allLines = useMemo(() => (generated ? computeBillingLines(db, period) : []), [db, period, generated])
+  const allLines = useMemo(() => (generated ? computeBillingLinesRange(db, from, to) : []), [db, from, to, generated])
 
   const lines = useMemo(
     () =>
@@ -62,12 +64,14 @@ export default function MonthlyBilling() {
   }
 
   function generate() {
+    if (!from || !to) return toast('Select both From and To dates', 'error')
+    if (from > to) return toast('From date must be on or before To date', 'error')
     setGenerated(true)
     setSelected(new Set())
   }
 
   function confirmBilling() {
-    recordBilling(period, selectedUnbilled.map((l) => l.id), billDate)
+    recordBilling(rangeKey, selectedUnbilled.map((l) => l.id), billDate)
     setSelected(new Set())
     setBillModal(false)
   }
@@ -80,7 +84,7 @@ export default function MonthlyBilling() {
 
   function exportExcel() {
     exportXlsx(
-      `monthly_billing_${period}.xlsx`,
+      `billing_${from}_to_${to}.xlsx`,
       lines.map((l) => {
         const billed = billedMap.get(l.id)
         return {
@@ -91,7 +95,7 @@ export default function MonthlyBilling() {
           CURRENCY: l.currency, 'COMBINED RATE': l.combinedRate, 'TOTAL VALUE': l.totalValue,
         }
       }),
-      `Billing ${period}`,
+      'Billing',
     )
   }
 
@@ -108,7 +112,7 @@ export default function MonthlyBilling() {
     setSubmitting(true)
     try {
       const payload = {
-        period, generatedAt: new Date().toISOString(), generatedBy: session?.name,
+        from, to, generatedAt: new Date().toISOString(), generatedBy: session?.name,
         lines: lines.map((l) => ({ ...l, billed: !!billedMap.get(l.id) })),
       }
       const res = await fetch(apiUrl, {
@@ -130,21 +134,18 @@ export default function MonthlyBilling() {
     update((d) => ({ ...d, settings: { ...d.settings, billingApiUrl: v } }))
   }
 
-  const years = []
-  for (let y = now.getFullYear() - 3; y <= now.getFullYear() + 1; y++) years.push(y)
-
   return (
     <div>
       <h1 className="page-title">Monthly Billing</h1>
-      <p className="page-sub">Consolidated billable lines per customer and month — activities, storage, handling and VAS.</p>
+      <p className="page-sub">Consolidated billable lines for a date range — activities, storage, handling and VAS.</p>
 
       <div className="card">
         <div className="form-grid">
-          <Field label="Month">
-            <Select value={String(month)} onChange={(v) => { setMonth(num(v, 1)); setGenerated(false) }} options={Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: monthName(i + 1) }))} />
+          <Field label="From Date">
+            <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setGenerated(false) }} max={to || undefined} />
           </Field>
-          <Field label="Year">
-            <Select value={String(year)} onChange={(v) => { setYear(num(v)); setGenerated(false) }} options={years.map((y) => String(y))} />
+          <Field label="To Date">
+            <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setGenerated(false) }} min={from || undefined} />
           </Field>
           <Field label="Customer">
             <Select value={customer} onChange={setCustomer} options={db.customers.map((c) => c.name)} placeholder="All customers" />
@@ -153,7 +154,7 @@ export default function MonthlyBilling() {
             <Select value={reportType} onChange={setReportType} options={['Activities', 'Storage', 'Handling', 'VAS']} placeholder="All" />
           </Field>
           <Field label="Billing Status">
-            <Select value={billStatus} onChange={setBillStatus} options={[{ value: 'notbilled', label: 'Not yet billed' }, { value: 'billed', label: 'Billed in period' }]} placeholder="All" />
+            <Select value={billStatus} onChange={setBillStatus} options={[{ value: 'notbilled', label: 'Not yet billed' }, { value: 'billed', label: 'Already billed' }]} placeholder="All" />
           </Field>
         </div>
         <div className="row-end">
@@ -182,7 +183,7 @@ export default function MonthlyBilling() {
           </div>
 
           {lines.length === 0 ? (
-            <EmptyState icon="💰" title={`No billable lines for ${monthName(month)} ${year}`} hint="Complete activities, storage movements or VAS charges in this period to generate billing." />
+            <EmptyState icon="💰" title={`No billable lines for ${rangeLabel}`} hint="Complete activities, storage movements or VAS charges in this date range to generate billing." />
           ) : (
             <div className="table-wrap">
               <table className="data">
@@ -270,7 +271,7 @@ export default function MonthlyBilling() {
           }
         >
           <p style={{ marginBottom: 12 }}>
-            Mark <b>{selectedUnbilled.length}</b> line(s) as billed for period <b>{monthName(month)} {year}</b>.
+            Mark <b>{selectedUnbilled.length}</b> line(s) as billed for <b>{rangeLabel}</b>.
           </p>
           <Field label="Billing date" required>
             <input type="date" value={billDate} onChange={(e) => setBillDate(e.target.value)} />
