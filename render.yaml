@@ -9,7 +9,7 @@ services:
     name: logitrack-pro
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: node server/index.js
     envVars:
       - key: NODE_ENV
@@ -18,3 +18,5 @@ services:
         fromDatabase:
           name: logitrack-db
           property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
