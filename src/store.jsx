@@ -76,15 +76,50 @@ async function fetchDbFromApi() {
   return res.json()
 }
 
-async function saveDbToApi(data) {
-  const res = await fetch(`${API_BASE}/db`, {
-    method: 'PUT',
+async function syncDbToApi(changes) {
+  const res = await fetch(`${API_BASE}/db/sync`, {
+    method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ data }),
+    body: JSON.stringify({ changes }),
   })
   if (res.status === 401) throw new Error('AUTH_EXPIRED')
-  if (!res.ok) throw new Error(`API save error: ${res.status}`)
+  if (!res.ok) throw new Error(`API sync error: ${res.status}`)
   return res.json()
+}
+
+// Compute per-collection changes between a baseline snapshot and the current
+// state. Collections are arrays of { id, ... } records; other fields are
+// compared whole. Returns null when nothing changed. The server merges these
+// changes into the authoritative document so concurrent clients don't clobber
+// each other.
+const NON_SYNCED_FIELDS = new Set(['version'])
+
+function computeChanges(baseline, current) {
+  if (!baseline || !current) return null
+  const changes = {}
+  const keys = new Set([...Object.keys(baseline), ...Object.keys(current)])
+  for (const key of keys) {
+    if (NON_SYNCED_FIELDS.has(key)) continue
+    const b = baseline[key]
+    const c = current[key]
+    if (Array.isArray(b) || Array.isArray(c)) {
+      const bArr = Array.isArray(b) ? b : []
+      const cArr = Array.isArray(c) ? c : []
+      const bMap = new Map(bArr.map((r) => [r.id, r]))
+      const cMap = new Map(cArr.map((r) => [r.id, r]))
+      const upserts = []
+      for (const [id, rec] of cMap) {
+        const prev = bMap.get(id)
+        if (!prev || JSON.stringify(prev) !== JSON.stringify(rec)) upserts.push(rec)
+      }
+      const removes = []
+      for (const id of bMap.keys()) if (!cMap.has(id)) removes.push(id)
+      if (upserts.length || removes.length) changes[key] = { upserts, removes }
+    } else if (JSON.stringify(b) !== JSON.stringify(c)) {
+      changes[key] = { value: c }
+    }
+  }
+  return Object.keys(changes).length ? changes : null
 }
 
 function loadSession() {
@@ -113,6 +148,7 @@ export function StoreProvider({ children }) {
   const [saveStatus, setSaveStatus] = useState('saved')
   const dbRef = useRef(db)
   dbRef.current = db
+  const baselineRef = useRef(null) // last state known to match the server
   const saveTimerRef = useRef(null)
   const initialLoadRef = useRef(true)
 
@@ -130,6 +166,7 @@ export function StoreProvider({ children }) {
       .then(({ data }) => {
         if (cancelled) return
         if (data && typeof data === 'object' && Array.isArray(data.users)) {
+          baselineRef.current = data
           setDb(data)
         }
         setDbReady(true)
@@ -150,15 +187,26 @@ export function StoreProvider({ children }) {
     return () => { cancelled = true }
   }, [])
 
-  // Debounced save to API on db changes
+  // Debounced save to API on db changes — sends only the per-collection diff
+  // so it merges into the server document instead of overwriting it.
   useEffect(() => {
     if (initialLoadRef.current || !db) return
 
+    const changes = computeChanges(baselineRef.current, db)
+    if (!changes) {
+      setSaveStatus('saved')
+      return
+    }
+
     setSaveStatus('saving')
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    const snapshot = db
     saveTimerRef.current = setTimeout(() => {
-      saveDbToApi(db)
-        .then(() => setSaveStatus('saved'))
+      syncDbToApi(changes)
+        .then(() => {
+          baselineRef.current = snapshot
+          setSaveStatus('saved')
+        })
         .catch((err) => {
           console.error('Auto-save failed:', err)
           if (err.message === 'AUTH_EXPIRED') {
@@ -176,13 +224,41 @@ export function StoreProvider({ children }) {
     }
   }, [db])
 
+  // Poll the server for changes made by other users. Skips while this client
+  // has unsynced local edits so it never stomps in-flight work.
+  useEffect(() => {
+    if (!session) return
+    const interval = setInterval(() => {
+      if (initialLoadRef.current || !dbRef.current) return
+      if (computeChanges(baselineRef.current, dbRef.current)) return // dirty; wait
+      fetchDbFromApi()
+        .then(({ data }) => {
+          if (!data || !Array.isArray(data.users)) return
+          if (computeChanges(baselineRef.current, dbRef.current)) return // changed while fetching
+          baselineRef.current = data
+          setDb(data)
+        })
+        .catch((err) => {
+          if (err.message === 'AUTH_EXPIRED') {
+            setToken(null)
+            setSession(null)
+            setDb(null)
+            localStorage.removeItem(SESSION_KEY)
+          }
+        })
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [session])
+
   // Save on page unload
   useEffect(() => {
     const handleUnload = () => {
       if (!db || initialLoadRef.current) return
+      const changes = computeChanges(baselineRef.current, db)
+      if (!changes) return
       const token = getToken()
-      const blob = new Blob([JSON.stringify({ data: db, token })], { type: 'application/json' })
-      navigator.sendBeacon(`${API_BASE}/db`, blob)
+      const blob = new Blob([JSON.stringify({ changes, token })], { type: 'application/json' })
+      navigator.sendBeacon(`${API_BASE}/db/sync`, blob)
     }
     window.addEventListener('beforeunload', handleUnload)
     return () => window.removeEventListener('beforeunload', handleUnload)
@@ -255,6 +331,7 @@ export function StoreProvider({ children }) {
 
         const dbRes = await fetchDbFromApi()
         if (dbRes.data && typeof dbRes.data === 'object') {
+          baselineRef.current = dbRes.data
           setDb(dbRes.data)
           initialLoadRef.current = false
         }
@@ -271,10 +348,11 @@ export function StoreProvider({ children }) {
   const logout = useCallback(
     (silent = false) => {
       if (session && !silent && db) {
-        update((d) => logEntry(session.name, 'Logout', 'Auth', `User ${session.userId} logged out`)(d))
+        const nextDb = logEntry(session.name, 'Logout', 'Auth', `User ${session.userId} logged out`)(db)
+        update(() => nextDb)
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-        const currentDb = dbRef.current
-        if (currentDb) saveDbToApi(currentDb).catch(() => {})
+        const changes = computeChanges(baselineRef.current, nextDb)
+        if (changes) syncDbToApi(changes).catch(() => {})
       }
       setTimeout(() => {
         setToken(null)
@@ -628,7 +706,10 @@ export function StoreProvider({ children }) {
         toast(result.error || 'Failed to reset database', 'error')
         return
       }
-      if (result.data) setDb(result.data)
+      if (result.data) {
+        baselineRef.current = result.data
+        setDb(result.data)
+      }
       toast('Database reset to seed data', 'info')
     } catch {
       toast('Failed to reset database', 'error')
@@ -646,7 +727,10 @@ export function StoreProvider({ children }) {
         toast(result.error || 'Failed to clear demo data', 'error')
         return
       }
-      if (result.data) setDb(result.data)
+      if (result.data) {
+        baselineRef.current = result.data
+        setDb(result.data)
+      }
       toast('Demo transactions and master data cleared', 'info')
     } catch {
       toast('Failed to clear demo data', 'error')

@@ -3,7 +3,7 @@ import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { getState, setState } from './db.js'
+import { getState, setState, applyChangesTx } from './db.js'
 import { hashPassword, verifyPassword, isLegacyHash, signToken, authMiddleware } from './auth.js'
 import { seedDb } from './seed.js'
 
@@ -39,31 +39,11 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
 })
 
-function validateAppData(data) {
-  return data && typeof data === 'object' && !Array.isArray(data)
-}
-
 function stripPasswordHashes(data) {
   if (!data?.users) return data
   return {
     ...data,
     users: data.users.map(({ passwordHash, ...rest }) => rest),
-  }
-}
-
-async function preserveServerHashes(clientData) {
-  const current = await getState()
-  if (!current?.data?.users || !clientData.users) return clientData
-  const hashMap = new Map()
-  for (const u of current.data.users) {
-    if (u.passwordHash) hashMap.set(u.id, u.passwordHash)
-  }
-  return {
-    ...clientData,
-    users: clientData.users.map((u) => ({
-      ...u,
-      passwordHash: hashMap.get(u.id) || u.passwordHash || null,
-    })),
   }
 }
 
@@ -196,29 +176,21 @@ app.get('/api/db', authMiddleware, async (_req, res) => {
   }
 })
 
-app.put('/api/db', authMiddleware, async (req, res) => {
+// Record-level sync: clients send only their per-collection changes, which are
+// merged into the authoritative document under a row lock so concurrent users
+// never overwrite each other. Also handles sendBeacon (token in body).
+app.post('/api/db/sync', authMiddleware, async (req, res) => {
   try {
-    const { data } = req.body
-    if (!validateAppData(data)) return res.status(400).json({ error: 'Missing or invalid data' })
-    const merged = await preserveServerHashes(data)
-    const version = await setState(merged)
-    res.json({ ok: true, version })
+    const { changes } = req.body
+    if (!changes || typeof changes !== 'object' || Array.isArray(changes)) {
+      return res.status(400).json({ error: 'Missing or invalid changes' })
+    }
+    const result = await applyChangesTx(changes)
+    if (!result) return res.status(500).json({ error: 'Database not initialized' })
+    res.json({ ok: true, version: result.version, data: stripPasswordHashes(result.data) })
   } catch (err) {
-    console.error('PUT /api/db error:', err)
-    res.status(500).json({ error: 'Failed to save database' })
-  }
-})
-
-app.post('/api/db', authMiddleware, async (req, res) => {
-  try {
-    const { data } = req.body
-    if (!validateAppData(data)) return res.status(400).json({ error: 'Missing or invalid data' })
-    const merged = await preserveServerHashes(data)
-    const version = await setState(merged)
-    res.json({ ok: true, version })
-  } catch (err) {
-    console.error('POST /api/db error:', err)
-    res.status(500).json({ error: 'Failed to save database' })
+    console.error('POST /api/db/sync error:', err)
+    res.status(500).json({ error: 'Failed to sync database' })
   }
 })
 
