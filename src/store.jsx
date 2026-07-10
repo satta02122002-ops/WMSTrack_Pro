@@ -418,7 +418,9 @@ export function StoreProvider({ children }) {
   }, [db?.attendance, currentUser])
 
   const isCheckedIn = !!todayAttendance
-  const needsCheckIn = currentUser ? currentUser.role !== 'Developer' && !isCheckedIn : false
+  // Only the User role checks in/out; Developer, Admin and Supervisor are exempt.
+  const attendanceRequired = currentUser?.role === 'User'
+  const needsCheckIn = attendanceRequired && !isCheckedIn
 
   const checkIn = useCallback(() => {
     if (!currentUser || isCheckedIn) return
@@ -765,7 +767,7 @@ export function StoreProvider({ children }) {
     const loginValue = {
       db: null, update: () => {}, upsert: () => {}, remove: () => {},
       session: null, currentUser: null, login, logout: () => {}, changePassword: async () => ({ ok: false }),
-      isCheckedIn: false, needsCheckIn: false, todayAttendance: null, checkIn: () => {}, checkOut: () => {},
+      isCheckedIn: false, needsCheckIn: false, attendanceRequired: false, todayAttendance: null, checkIn: () => {}, checkOut: () => {},
       myActiveActivity: null, startActivity: () => {}, pauseActivity: () => {}, resumeActivity: () => {},
       joinActivity: () => {}, leaveActivity: () => {}, endActivity: () => {},
       recordBilling: () => {}, unbillRecords: () => {}, billedMap: new Map(),
@@ -782,7 +784,7 @@ export function StoreProvider({ children }) {
   const value = {
     db, update, upsert, remove,
     session, currentUser, login, logout, changePassword,
-    isCheckedIn, needsCheckIn, todayAttendance, checkIn, checkOut,
+    isCheckedIn, needsCheckIn, attendanceRequired, todayAttendance, checkIn, checkOut,
     myActiveActivity, startActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, endActivity,
     recordBilling, unbillRecords, billedMap,
     logAction, toast, toasts,

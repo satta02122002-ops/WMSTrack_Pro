@@ -52,7 +52,7 @@ function ChangePasswordModal({ onClose }) {
 }
 
 export default function Layout({ page, setPage, children }) {
-  const { currentUser, logout, isCheckedIn, needsCheckIn, todayAttendance, checkIn, checkOut, toasts, saveStatus } = useStore()
+  const { currentUser, logout, isCheckedIn, needsCheckIn, attendanceRequired, todayAttendance, checkIn, checkOut, toasts, saveStatus } = useStore()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [pwOpen, setPwOpen] = useState(false)
@@ -83,14 +83,16 @@ export default function Layout({ page, setPage, children }) {
           </div>
         </div>
         <div className="header-actions">
-          {!isCheckedIn ? (
-            <button className="btn btn-header" onClick={checkIn} title="Mark yourself present to start operations">
-              ✅ Check-In
-            </button>
-          ) : (
-            <button className="btn btn-header" onClick={checkOut} title="End your shift, record hours and log out">
-              🕔 Check-Out
-            </button>
+          {attendanceRequired && (
+            !isCheckedIn ? (
+              <button className="btn btn-header" onClick={checkIn} title="Mark yourself present to start operations">
+                ✅ Check-In
+              </button>
+            ) : (
+              <button className="btn btn-header" onClick={checkOut} title="End your shift, record hours and log out">
+                🕔 Check-Out
+              </button>
+            )
           )}
           <button className="btn btn-header" onClick={() => setPwOpen(true)}>🔑 Password</button>
           <button className="btn btn-header" onClick={() => logout()}>Logout</button>
