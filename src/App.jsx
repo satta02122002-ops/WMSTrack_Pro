@@ -5,7 +5,6 @@ import Login from './pages/Login.jsx'
 import { EmptyState } from './components/ui.jsx'
 
 const OperationsExecution = lazy(() => import('./pages/OperationsExecution.jsx'))
-const PendingActivity = lazy(() => import('./pages/PendingActivity.jsx'))
 const OperationsMonitor = lazy(() => import('./pages/OperationsMonitor.jsx'))
 const StorageHandling = lazy(() => import('./pages/StorageHandling.jsx'))
 const VAS = lazy(() => import('./pages/VAS.jsx'))
@@ -51,7 +50,6 @@ class ErrorBoundary extends Component {
 
 const PAGE_COMPONENTS = {
   operations: OperationsExecution,
-  pending: PendingActivity,
   monitor: OperationsMonitor,
   storage: StorageHandling,
   vas: VAS,

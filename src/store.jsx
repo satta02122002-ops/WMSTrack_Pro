@@ -9,7 +9,6 @@ const API_BASE = '/api'
 
 export const PAGES = [
   { key: 'operations', label: 'Operations Execution', icon: '▶️' },
-  { key: 'pending', label: 'Pending Activity', icon: '🕘' },
   { key: 'monitor', label: 'Operations Monitor', icon: '📡' },
   { key: 'storage', label: 'Storage & Handling', icon: '📦' },
   { key: 'vas', label: 'Value Added Services', icon: '🏷️' },
@@ -29,8 +28,8 @@ export const ROLES = ['Developer', 'Admin', 'Supervisor', 'User']
 export const ROLE_PAGES = {
   Developer: PAGES.map((p) => p.key),
   Admin: PAGES.map((p) => p.key).filter((k) => k !== 'users'),
-  Supervisor: ['operations', 'pending', 'monitor', 'storage', 'reports'],
-  User: ['operations', 'pending'],
+  Supervisor: ['operations', 'monitor', 'storage', 'reports'],
+  User: ['operations'],
 }
 
 export function pagesForUser(user) {
@@ -655,7 +654,7 @@ export function StoreProvider({ children }) {
       const completed = {
         ...act, ...payload, status: 'complete', endTime: end,
         accumulatedSeconds: durationSeconds, lastResumeTime: null, durationSeconds,
-        outcome: payload.forward ? 'forwarded' : 'finished',
+        outcome: 'finished',
       }
       delete completed.forward
 
@@ -684,30 +683,12 @@ export function StoreProvider({ children }) {
           )(next)
         }
 
-        if (payload.forward) {
-          const pend = {
-            id: uid('pnd'), customerName: act.customerName, customerRef: act.customerRef, date: completed.date,
-            status: 'Pending', lastActivityName: act.type,
-            forwardedFromUser: session?.name || act.ownerName, createdAt: nowISO(),
-          }
-          next = { ...next, pendingAssignments: [pend, ...next.pendingAssignments] }
-        } else {
-          next = {
-            ...next,
-            pendingAssignments: next.pendingAssignments.map((p) =>
-              p.status === 'Pending' && p.customerName === act.customerName && p.customerRef === act.customerRef
-                ? { ...p, status: 'Done' }
-                : p,
-            ),
-          }
-        }
-
         return logEntry(
           session?.name || act.ownerName, 'End Activity', 'Operations',
-          `${act.type} for ${act.customerName} (${act.customerRef}) — ${payload.forward ? 'forwarded' : 'finished'}`,
+          `${act.type} for ${act.customerName} (${act.customerRef}) — finished`,
         )(next)
       })
-      toast(payload.forward ? 'Activity completed and forwarded to Pending Activity' : 'Activity completed')
+      toast('Activity completed')
     },
     [update, logEntry, session, toast],
   )

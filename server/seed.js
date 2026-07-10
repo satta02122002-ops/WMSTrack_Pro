@@ -193,10 +193,4 @@ function seedDemoTransactions(db) {
       })
     }
   }
-
-  const c0 = db.customers[0]
-  db.pendingAssignments.push({
-    id: uid('pnd'), customerName: c0.name, customerRef: c0.references[0], date: todayISO(),
-    status: 'Pending', lastActivityName: 'Picking', forwardedFromUser: 'Warehouse Admin', createdAt: nowISO(),
-  })
 }

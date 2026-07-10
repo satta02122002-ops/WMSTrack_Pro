@@ -147,7 +147,6 @@ export default function OperationsExecution() {
   const {
     db, currentUser, needsCheckIn, myActiveActivity,
     addActivities, startAssignedActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, remove,
-    prefill, setPrefill, toast,
   } = useStore()
   const hasLive = !!myActiveActivity || db.operationsActivities.some((a) => a.status !== 'complete')
   useTick(hasLive)
@@ -160,21 +159,6 @@ export default function OperationsExecution() {
   const [types, setTypes] = useState(() => new Set())
   const [assignTo, setAssignTo] = useState('')
   const [endOpen, setEndOpen] = useState(false)
-  const [fromPending, setFromPending] = useState(false)
-
-  // Prefill hand-off from Pending Activity → the Add Activity form
-  useEffect(() => {
-    if (prefill) {
-      if (canAssign) {
-        setCustomerName(prefill.customerName || '')
-        setCustomerRef(prefill.customerRef || '')
-        setTypes(new Set())
-        setFromPending(true)
-        toast(`Add-activity form pre-filled from pending job: ${prefill.customerName} (${prefill.customerRef})`, 'info')
-      }
-      setPrefill(null)
-    }
-  }, [prefill, setPrefill, toast, canAssign])
 
   const customer = db.customers.find((c) => c.name === customerName)
   const canAddSubmit = customerName && customerRef.trim() && types.size > 0
@@ -189,7 +173,7 @@ export default function OperationsExecution() {
     })
   }
   function clearJob() {
-    setCustomerName(''); setCustomerRef(''); setTypes(new Set()); setAssignTo(''); setFromPending(false)
+    setCustomerName(''); setCustomerRef(''); setTypes(new Set()); setAssignTo('')
   }
 
   // Activities this user can pick up: assigned to them, or left unassigned.
@@ -208,7 +192,6 @@ export default function OperationsExecution() {
     // Keep the job (customer / reference / assignee) so more activities can be
     // added for the same job; only clear the selected activity types.
     setTypes(new Set())
-    setFromPending(false)
   }
 
   const master = myActiveActivity && db.activitiesMaster.find((a) => a.name === myActiveActivity.type)
@@ -271,7 +254,7 @@ export default function OperationsExecution() {
       {/* Add Activity — Admin / Supervisor */}
       {canAssign && (
         <div className="card">
-          <div className="card-title">➕ Add Activities {fromPending && <span className="badge badge-brand" style={{ marginLeft: 8, fontSize: 11 }}>From Pending Job</span>}</div>
+          <div className="card-title">➕ Add Activities</div>
           <p style={{ color: 'var(--ink-500)', fontSize: 13, marginBottom: 10 }}>
             Pick the job once, then select one or more activities — each becomes a separate assigned task. After adding, the customer and reference stay so you can add more activities to the same job.
           </p>
@@ -279,7 +262,7 @@ export default function OperationsExecution() {
             <Field label="Customer Name" required>
               <Select
                 value={customerName}
-                onChange={(v) => { setCustomerName(v); setCustomerRef(''); setFromPending(false) }}
+                onChange={(v) => { setCustomerName(v); setCustomerRef('') }}
                 options={db.customers.map((c) => c.name)}
                 placeholder="Select customer…"
               />
