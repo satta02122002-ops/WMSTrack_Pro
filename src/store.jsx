@@ -484,6 +484,57 @@ export function StoreProvider({ children }) {
     [currentUser, update, logEntry, toast],
   )
 
+  // Admin/Supervisor create an activity and (optionally) assign it to a user.
+  // It waits as 'assigned' until a user starts executing it.
+  const addActivity = useCallback(
+    ({ customerName, customerRef, type, assignedTo }) => {
+      if (!currentUser) return
+      const master = dbRef.current.activitiesMaster.find((a) => a.name === type)
+      const assignee = assignedTo ? dbRef.current.users.find((u) => u.userId === assignedTo) : null
+      const act = {
+        id: uid('op'), customerName, customerRef, date: todayISO(),
+        type, storageType: master?.storageType || null, status: 'assigned',
+        startTime: null, endTime: null,
+        accumulatedSeconds: 0, lastResumeTime: null, durationSeconds: null,
+        qty: null, uom: null, cbm: null, storageTypeUsed: null,
+        handlingMode: null, vehicleType: null, truckCount: null, packageQty: null, packageUom: null,
+        assignedTo: assignedTo || null, assignedToName: assignee?.name || null,
+        owner: null, ownerName: null, participants: [], outcome: null,
+        createdBy: currentUser.userId, createdByName: currentUser.name,
+      }
+      update((d) =>
+        logEntry(currentUser.name, 'Assign Activity', 'Operations', `${type} for ${customerName} (${customerRef})${assignee ? ` → ${assignee.name}` : ' (unassigned)'}`)({
+          ...d,
+          operationsActivities: [act, ...d.operationsActivities],
+        }),
+      )
+      toast(`Activity "${type}" added${assignee ? ` for ${assignee.name}` : ''}`)
+      return act
+    },
+    [currentUser, update, logEntry, toast],
+  )
+
+  // A user picks up an assigned activity and begins executing it.
+  const startAssignedActivity = useCallback(
+    (id) => {
+      if (!currentUser) return
+      const act = dbRef.current.operationsActivities.find((a) => a.id === id)
+      if (!act || act.status !== 'assigned') return
+      update((d) =>
+        logEntry(currentUser.name, 'Start Activity', 'Operations', `${act.type} for ${act.customerName} (${act.customerRef})`)({
+          ...d,
+          operationsActivities: d.operationsActivities.map((a) =>
+            a.id === id
+              ? { ...a, status: 'in_progress', owner: currentUser.userId, ownerName: currentUser.name, startTime: nowISO(), lastResumeTime: nowISO(), accumulatedSeconds: 0 }
+              : a,
+          ),
+        }),
+      )
+      toast(`Activity "${act.type}" started`)
+    },
+    [currentUser, update, logEntry, toast],
+  )
+
   const pauseActivity = useCallback(
     (id) => {
       update((d) =>
@@ -768,7 +819,8 @@ export function StoreProvider({ children }) {
       db: null, update: () => {}, upsert: () => {}, remove: () => {},
       session: null, currentUser: null, login, logout: () => {}, changePassword: async () => ({ ok: false }),
       isCheckedIn: false, needsCheckIn: false, attendanceRequired: false, todayAttendance: null, checkIn: () => {}, checkOut: () => {},
-      myActiveActivity: null, startActivity: () => {}, pauseActivity: () => {}, resumeActivity: () => {},
+      myActiveActivity: null, startActivity: () => {}, addActivity: () => {}, startAssignedActivity: () => {},
+      pauseActivity: () => {}, resumeActivity: () => {},
       joinActivity: () => {}, leaveActivity: () => {}, endActivity: () => {},
       recordBilling: () => {}, unbillRecords: () => {}, billedMap: new Map(),
       logAction: () => {}, toast, toasts,
@@ -785,7 +837,7 @@ export function StoreProvider({ children }) {
     db, update, upsert, remove,
     session, currentUser, login, logout, changePassword,
     isCheckedIn, needsCheckIn, attendanceRequired, todayAttendance, checkIn, checkOut,
-    myActiveActivity, startActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, endActivity,
+    myActiveActivity, startActivity, addActivity, startAssignedActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, endActivity,
     recordBilling, unbillRecords, billedMap,
     logAction, toast, toasts,
     prefill, setPrefill,

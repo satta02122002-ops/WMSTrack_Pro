@@ -147,44 +147,61 @@ export function EndActivityModal({ activity, onClose }) {
   )
 }
 
+const ASSIGN_ROLES = ['Admin', 'Supervisor', 'Developer']
+const EXECUTE_ROLES = ['User', 'Developer']
+
 export default function OperationsExecution() {
   const {
     db, currentUser, needsCheckIn, myActiveActivity,
-    startActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity,
+    addActivity, startAssignedActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, remove,
     prefill, setPrefill, toast,
   } = useStore()
   const hasLive = !!myActiveActivity || db.operationsActivities.some((a) => a.status !== 'complete')
   useTick(hasLive)
 
+  const canAssign = ASSIGN_ROLES.includes(currentUser.role)
+  const canExecute = EXECUTE_ROLES.includes(currentUser.role)
+
   const [customerName, setCustomerName] = useState('')
   const [customerRef, setCustomerRef] = useState('')
   const [type, setType] = useState('')
+  const [assignTo, setAssignTo] = useState('')
   const [endOpen, setEndOpen] = useState(false)
   const [fromPending, setFromPending] = useState(false)
 
-  // Prefill hand-off from Pending Activity
+  // Prefill hand-off from Pending Activity → the Add Activity form
   useEffect(() => {
     if (prefill) {
-      setCustomerName(prefill.customerName || '')
-      setCustomerRef(prefill.customerRef || '')
-      setType('')
-      setFromPending(true)
+      if (canAssign) {
+        setCustomerName(prefill.customerName || '')
+        setCustomerRef(prefill.customerRef || '')
+        setType('')
+        setFromPending(true)
+        toast(`Add-activity form pre-filled from pending job: ${prefill.customerName} (${prefill.customerRef})`, 'info')
+      }
       setPrefill(null)
-      toast(`Form pre-filled from pending job: ${prefill.customerName} (${prefill.customerRef})`, 'info')
     }
-  }, [prefill, setPrefill, toast])
+  }, [prefill, setPrefill, toast, canAssign])
 
   const customer = db.customers.find((c) => c.name === customerName)
-  const canStart = !needsCheckIn && !myActiveActivity && customerName && customerRef.trim() && type
+  const canAddSubmit = customerName && customerRef.trim() && type
   const isOwner = myActiveActivity && myActiveActivity.owner === currentUser.userId
+  const userOptions = db.users.filter((u) => u.active && u.role === 'User').map((u) => ({ value: u.userId, label: u.name }))
 
+  // Activities this user can pick up: assigned to them, or left unassigned.
+  const myAssigned = db.operationsActivities.filter(
+    (a) => a.status === 'assigned' && (!a.assignedTo || a.assignedTo === currentUser.userId),
+  )
+  // All not-yet-complete activities, for the assign overview.
+  const openActivities = db.operationsActivities.filter((a) => a.status !== 'complete')
+  // Running (started) activities owned by someone else — joinable as participant.
   const otherRunning = db.operationsActivities.filter(
-    (a) => a.status !== 'complete' && a.owner !== currentUser.userId,
+    (a) => (a.status === 'in_progress' || a.status === 'paused') && a.owner !== currentUser.userId,
   )
 
-  function handleStart() {
-    startActivity({ customerName, customerRef: customerRef.trim(), type })
-    setCustomerName(''); setCustomerRef(''); setType(''); setFromPending(false)
+  function handleAdd() {
+    addActivity({ customerName, customerRef: customerRef.trim(), type, assignedTo: assignTo })
+    setCustomerName(''); setCustomerRef(''); setType(''); setAssignTo(''); setFromPending(false)
   }
 
   const master = myActiveActivity && db.activitiesMaster.find((a) => a.name === myActiveActivity.type)
@@ -192,9 +209,14 @@ export default function OperationsExecution() {
   return (
     <div>
       <h1 className="page-title">Operations Execution</h1>
-      <p className="page-sub">Start, track and complete warehouse activities. One active task per user.</p>
+      <p className="page-sub">
+        {canAssign
+          ? 'Add and assign warehouse activities. Users pick up and execute their assigned work.'
+          : 'Pick up and execute the activities assigned to you. One active task at a time.'}
+      </p>
 
-      {myActiveActivity ? (
+      {/* Live panel — the executor's currently running activity */}
+      {canExecute && myActiveActivity && (
         <div className="card live-panel">
           <div className="spread">
             <div>
@@ -237,12 +259,15 @@ export default function OperationsExecution() {
             </div>
           </div>
         </div>
-      ) : (
+      )}
+
+      {/* Add Activity — Admin / Supervisor */}
+      {canAssign && (
         <div className="card">
-          <div className="card-title">▶️ Start New Activity {fromPending && <span className="badge badge-brand" style={{ marginLeft: 8, fontSize: 11 }}>From Pending Job</span>}</div>
+          <div className="card-title">➕ Add Activity {fromPending && <span className="badge badge-brand" style={{ marginLeft: 8, fontSize: 11 }}>From Pending Job</span>}</div>
           {fromPending && (
             <p style={{ color: 'var(--ink-400)', fontSize: 13, marginBottom: 8 }}>
-              Customer and reference are locked to the forwarded job.{' '}
+              Customer and reference are pre-filled from the forwarded job.{' '}
               <button className="btn-link" style={{ fontSize: 13 }} onClick={() => { setFromPending(false); setCustomerName(''); setCustomerRef(''); setType('') }}>Clear</button>
             </p>
           )}
@@ -253,7 +278,6 @@ export default function OperationsExecution() {
                 onChange={(v) => { setCustomerName(v); setCustomerRef(''); setFromPending(false) }}
                 options={db.customers.map((c) => c.name)}
                 placeholder="Select customer…"
-                disabled={fromPending}
               />
             </Field>
             <Field label="Customer Reference No" required>
@@ -263,8 +287,7 @@ export default function OperationsExecution() {
                 value={customerRef}
                 onChange={(e) => setCustomerRef(e.target.value)}
                 placeholder="e.g. PO-1001"
-                disabled={!customerName || fromPending}
-                readOnly={fromPending}
+                disabled={!customerName}
               />
               <datalist id="ref-options">
                 {(customer?.references || []).map((r) => <option key={r} value={r} />)}
@@ -281,62 +304,146 @@ export default function OperationsExecution() {
                 placeholder="Select activity…"
               />
             </Field>
+            <Field label="Assign To" hint="Leave empty so any user can pick it up">
+              <Select value={assignTo} onChange={setAssignTo} options={userOptions} placeholder="Any user (unassigned)" />
+            </Field>
           </div>
           <div className="row-end">
-            <button className="btn btn-primary" disabled={!canStart} onClick={handleStart} title={needsCheckIn ? 'Check in first' : ''}>
-              ▶ Start Activity
-            </button>
+            <button className="btn btn-primary" disabled={!canAddSubmit} onClick={handleAdd}>➕ Add Activity</button>
           </div>
         </div>
       )}
 
-      <div className="card">
-        <div className="card-title">👥 Running Activities — Join as Participant</div>
-        {otherRunning.length === 0 ? (
-          <EmptyState icon="🤝" title="No other activities running right now" hint="When a colleague starts an activity you can join it here." />
-        ) : (
-          <div className="table-wrap">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>Activity</th><th>Customer</th><th>Reference</th><th>Owner</th>
-                  <th>Participants</th><th>Status</th><th className="num">Duration</th><th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {otherRunning.map((a) => {
-                  const joined = (a.participants || []).some((p) => p.userId === currentUser.userId)
-                  return (
+      {/* My Assigned Activities — Users pick these up */}
+      {canExecute && !myActiveActivity && (
+        <div className="card">
+          <div className="card-title">📋 My Assigned Activities</div>
+          {myAssigned.length === 0 ? (
+            <EmptyState icon="📋" title="No activities assigned to you" hint="When a supervisor adds an activity for you (or leaves one unassigned), it appears here to start." />
+          ) : (
+            <div className="table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Activity</th><th>Customer</th><th>Reference</th><th>Assigned To</th><th>Added By</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {myAssigned.map((a) => (
+                    <tr key={a.id}>
+                      <td><b>{a.type}</b>{a.storageType && <span className={'badge ' + (a.storageType === 'inbound' ? 'badge-brand' : 'badge-blue')} style={{ marginLeft: 6 }}>{a.storageType.toUpperCase()}</span>}</td>
+                      <td>{a.customerName}</td>
+                      <td>{a.customerRef}</td>
+                      <td>{a.assignedToName || <span className="badge badge-gray">ANY USER</span>}</td>
+                      <td>{a.createdByName || '—'}</td>
+                      <td>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          disabled={!!myActiveActivity || needsCheckIn}
+                          onClick={() => startAssignedActivity(a.id)}
+                          title={myActiveActivity ? 'You already have an active task' : needsCheckIn ? 'Check in first' : 'Start executing this activity'}
+                        >
+                          ▶ Start Activity
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Assigned & Running overview — Admin / Supervisor */}
+      {canAssign && (
+        <div className="card">
+          <div className="card-title">🗂️ Assigned &amp; Running Activities</div>
+          {openActivities.length === 0 ? (
+            <EmptyState icon="🗂️" title="No open activities" hint="Add an activity above to assign work to your users." />
+          ) : (
+            <div className="table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Activity</th><th>Customer</th><th>Reference</th><th>Assigned To</th>
+                    <th>Status</th><th>Being Done By</th><th className="num">Duration</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {openActivities.map((a) => (
                     <tr key={a.id}>
                       <td><b>{a.type}</b></td>
                       <td>{a.customerName}</td>
                       <td>{a.customerRef}</td>
-                      <td>{a.ownerName}</td>
-                      <td>{(a.participants || []).map((p) => p.name).join(', ') || '—'}</td>
+                      <td>{a.assignedToName || <span className="badge badge-gray">ANY USER</span>}</td>
                       <td><StatusBadge status={a.status} /></td>
-                      <td className="num">{fmtDuration(activityDuration(a))}</td>
+                      <td>{a.ownerName || '—'}</td>
+                      <td className="num">{a.status === 'assigned' ? '—' : fmtDuration(activityDuration(a))}</td>
                       <td>
-                        {joined ? (
-                          <button className="btn btn-sm btn-ghost" onClick={() => leaveActivity(a.id)}>Leave</button>
-                        ) : (
-                          <button
-                            className="btn btn-sm btn-outline"
-                            disabled={!!myActiveActivity || needsCheckIn}
-                            onClick={() => joinActivity(a.id)}
-                            title={myActiveActivity ? 'You already have an active task' : needsCheckIn ? 'Check in first' : ''}
-                          >
-                            Join
-                          </button>
+                        {a.status === 'assigned' && (
+                          <button className="btn btn-sm btn-danger" onClick={() => window.confirm('Remove this assigned activity?') && remove('operationsActivities', a.id, { entityType: 'Operations', label: 'assigned activity' })}>✕</button>
                         )}
                       </td>
                     </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Join as participant — Users */}
+      {canExecute && (
+        <div className="card">
+          <div className="card-title">👥 Running Activities — Join as Participant</div>
+          {otherRunning.length === 0 ? (
+            <EmptyState icon="🤝" title="No other activities running right now" hint="When a colleague starts an activity you can join it here." />
+          ) : (
+            <div className="table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Activity</th><th>Customer</th><th>Reference</th><th>Owner</th>
+                    <th>Participants</th><th>Status</th><th className="num">Duration</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {otherRunning.map((a) => {
+                    const joined = (a.participants || []).some((p) => p.userId === currentUser.userId)
+                    return (
+                      <tr key={a.id}>
+                        <td><b>{a.type}</b></td>
+                        <td>{a.customerName}</td>
+                        <td>{a.customerRef}</td>
+                        <td>{a.ownerName}</td>
+                        <td>{(a.participants || []).map((p) => p.name).join(', ') || '—'}</td>
+                        <td><StatusBadge status={a.status} /></td>
+                        <td className="num">{fmtDuration(activityDuration(a))}</td>
+                        <td>
+                          {joined ? (
+                            <button className="btn btn-sm btn-ghost" onClick={() => leaveActivity(a.id)}>Leave</button>
+                          ) : (
+                            <button
+                              className="btn btn-sm btn-outline"
+                              disabled={!!myActiveActivity || needsCheckIn}
+                              onClick={() => joinActivity(a.id)}
+                              title={myActiveActivity ? 'You already have an active task' : needsCheckIn ? 'Check in first' : ''}
+                            >
+                              Join
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {endOpen && myActiveActivity && <EndActivityModal activity={myActiveActivity} onClose={() => setEndOpen(false)} />}
     </div>

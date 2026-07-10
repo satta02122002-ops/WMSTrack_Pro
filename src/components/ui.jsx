@@ -60,6 +60,7 @@ export function EmptyState({ icon = '📭', title, hint }) {
 
 export function StatusBadge({ status }) {
   const map = {
+    assigned: ['ASSIGNED', 'badge-amber'],
     in_progress: ['IN PROGRESS', 'badge-green'],
     paused: ['PAUSED', 'badge-amber'],
     complete: ['COMPLETE', 'badge-blue'],

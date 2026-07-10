@@ -4,7 +4,8 @@ import { StatusBadge, EmptyState, Select, Field } from '../components/ui.jsx'
 import { fmtDate } from '../utils.js'
 
 export default function PendingActivity({ setPage }) {
-  const { db, setPrefill, myActiveActivity, needsCheckIn } = useStore()
+  const { db, setPrefill, currentUser } = useStore()
+  const canAssign = ['Admin', 'Supervisor', 'Developer'].includes(currentUser.role)
   const [statusFilter, setStatusFilter] = useState('')
   const [customerFilter, setCustomerFilter] = useState('')
   const [activityFilter, setActivityFilter] = useState('')
@@ -69,14 +70,13 @@ export default function PendingActivity({ setPage }) {
                     <td>{p.forwardedFromUser}</td>
                     <td><StatusBadge status={p.status} /></td>
                     <td>
-                      {p.status === 'Pending' && (
+                      {p.status === 'Pending' && canAssign && (
                         <button
                           className="btn btn-sm btn-primary"
-                          disabled={!!myActiveActivity || needsCheckIn}
                           onClick={() => startFromPending(p)}
-                          title={myActiveActivity ? 'You already have an active task' : needsCheckIn ? 'Check in first' : 'Pre-fill Operations Execution with this job'}
+                          title="Pre-fill the Add Activity form with this job"
                         >
-                          ▶ Start Activity
+                          ➕ Add Activity
                         </button>
                       )}
                     </td>
