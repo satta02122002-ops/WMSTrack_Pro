@@ -5,7 +5,7 @@ import { fmtDate } from '../utils.js'
 
 export default function PendingActivity({ setPage }) {
   const { db, setPrefill, myActiveActivity, needsCheckIn } = useStore()
-  const [statusFilter, setStatusFilter] = useState('Pending')
+  const [statusFilter, setStatusFilter] = useState('')
   const [customerFilter, setCustomerFilter] = useState('')
   const [activityFilter, setActivityFilter] = useState('')
 
@@ -31,7 +31,7 @@ export default function PendingActivity({ setPage }) {
       <div className="card">
         <div className="form-grid" style={{ marginBottom: 12 }}>
           <Field label="Status">
-            <Select value={statusFilter} onChange={setStatusFilter} options={['Pending', 'Done']} placeholder="All statuses" />
+            <Select value={statusFilter} onChange={setStatusFilter} options={[{ value: 'Pending', label: 'Ongoing' }, { value: 'Done', label: 'Completed' }]} placeholder="All" />
           </Field>
           <Field label="Customer">
             <Select value={customerFilter} onChange={setCustomerFilter} options={db.customers.map((c) => c.name)} placeholder="All customers" />
