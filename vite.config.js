@@ -6,8 +6,13 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
-    // Accept GitHub Codespaces / dev-tunnel forwarded hostnames
     allowedHosts: ['.app.github.dev', '.github.dev', 'localhost'],
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
   },
   preview: {
     port: 4173,

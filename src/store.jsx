@@ -1,9 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { uid, sha256, todayISO, nowISO, toISODate, activityDuration, round2, num, daysToMonthEnd } from './utils.js'
 
-const DB_KEY = 'wmstrack_pro_db_v1'
 const SESSION_KEY = 'wmstrack_pro_session_v1'
 export const REMEMBER_KEY = 'wmstrack_pro_remember_uid'
+const API_BASE = '/api'
 
 // ---- Pages & roles -------------------------------------------------------
 
@@ -260,21 +260,32 @@ function mulberry32(a) {
   }
 }
 
-// ---- Persistence ---------------------------------------------------------
+// ---- API persistence layer -----------------------------------------------
 
-function loadDb() {
-  try {
-    const raw = localStorage.getItem(DB_KEY)
-    if (raw) {
-      const db = JSON.parse(raw)
-      if (db && db.version === 1) return db
-    }
-  } catch (e) {
-    console.error('Failed to load DB, reseeding', e)
-  }
-  const db = seedDb()
-  localStorage.setItem(DB_KEY, JSON.stringify(db))
-  return db
+async function fetchDbFromApi() {
+  const res = await fetch(`${API_BASE}/db`)
+  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  return res.json()
+}
+
+async function saveDbToApi(data) {
+  const res = await fetch(`${API_BASE}/db`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data }),
+  })
+  if (!res.ok) throw new Error(`API save error: ${res.status}`)
+  return res.json()
+}
+
+async function resetDbApi(data) {
+  const res = await fetch(`${API_BASE}/db/reset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data }),
+  })
+  if (!res.ok) throw new Error(`API reset error: ${res.status}`)
+  return res.json()
 }
 
 function loadSession() {
@@ -294,15 +305,64 @@ export function useStore() {
 }
 
 export function StoreProvider({ children }) {
-  const [db, setDb] = useState(loadDb)
+  const [db, setDb] = useState(null)
+  const [dbReady, setDbReady] = useState(false)
+  const [dbError, setDbError] = useState(null)
   const [session, setSession] = useState(loadSession)
   const [toasts, setToasts] = useState([])
-  const [prefill, setPrefill] = useState(null) // pending -> operations handoff
+  const [prefill, setPrefill] = useState(null)
   const dbRef = useRef(db)
   dbRef.current = db
+  const saveTimerRef = useRef(null)
+  const initialLoadRef = useRef(true)
 
+  // Load database from API on mount
   useEffect(() => {
-    localStorage.setItem(DB_KEY, JSON.stringify(db))
+    let cancelled = false
+    fetchDbFromApi()
+      .then(({ data }) => {
+        if (cancelled) return
+        if (data && data.version === 1) {
+          setDb(data)
+        } else {
+          const seed = seedDb()
+          setDb(seed)
+          saveDbToApi(seed).catch((err) => console.error('Failed to save seed:', err))
+        }
+        setDbReady(true)
+        setTimeout(() => { initialLoadRef.current = false }, 100)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error('Failed to load from API:', err)
+        setDbError(err.message)
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  // Debounced save to API on db changes
+  useEffect(() => {
+    if (initialLoadRef.current || !db) return
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveDbToApi(db).catch((err) => console.error('Auto-save failed:', err))
+    }, 500)
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [db])
+
+  // Save on page unload
+  useEffect(() => {
+    const handleUnload = () => {
+      if (!db || initialLoadRef.current) return
+      const blob = new Blob([JSON.stringify({ data: db })], { type: 'application/json' })
+      navigator.sendBeacon(`${API_BASE}/db`, blob)
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => window.removeEventListener('beforeunload', handleUnload)
   }, [db])
 
   useEffect(() => {
@@ -343,9 +403,9 @@ export function StoreProvider({ children }) {
   // ---- Auth --------------------------------------------------------------
 
   const currentUser = useMemo(() => {
-    if (!session) return null
+    if (!session || !db) return null
     return db.users.find((u) => u.id === session.userRecordId) || null
-  }, [db.users, session])
+  }, [db?.users, session])
 
   const login = useCallback(
     async (userIdInput, password) => {
@@ -390,11 +450,11 @@ export function StoreProvider({ children }) {
   // ---- Attendance / daily gate --------------------------------------------
 
   const todayAttendance = useMemo(() => {
-    if (!currentUser) return null
+    if (!currentUser || !db) return null
     return (
       db.attendance.find((a) => a.userId === currentUser.userId && a.date === todayISO() && !a.checkOutTime) || null
     )
-  }, [db.attendance, currentUser])
+  }, [db?.attendance, currentUser])
 
   const isCheckedIn = !!todayAttendance
   const needsCheckIn = currentUser ? currentUser.role !== 'Developer' && !isCheckedIn : false
@@ -425,9 +485,8 @@ export function StoreProvider({ children }) {
 
   // ---- Operations ----------------------------------------------------------
 
-  /** Activity the current user is engaged in (owner or participant), if any. */
   const myActiveActivity = useMemo(() => {
-    if (!currentUser) return null
+    if (!currentUser || !db) return null
     return (
       db.operationsActivities.find(
         (a) =>
@@ -435,7 +494,7 @@ export function StoreProvider({ children }) {
           (a.owner === currentUser.userId || (a.participants || []).some((p) => p.userId === currentUser.userId)),
       ) || null
     )
-  }, [db.operationsActivities, currentUser])
+  }, [db?.operationsActivities, currentUser])
 
   const startActivity = useCallback(
     ({ customerName, customerRef, type }) => {
@@ -528,12 +587,6 @@ export function StoreProvider({ children }) {
     [currentUser, update, logEntry, toast],
   )
 
-  /**
-   * End an activity. payload:
-   *  { qty, uom }  for normal activities
-   *  { cbm, storageTypeUsed, handlingMode, vehicleType, truckCount, packageQty, packageUom } for inbound/outbound
-   *  { forward: bool } — Forward creates a pending assignment; Finish closes matching pending rows.
-   */
   const endActivity = useCallback(
     (id, payload) => {
       const act = dbRef.current.operationsActivities.find((a) => a.id === id)
@@ -553,7 +606,6 @@ export function StoreProvider({ children }) {
           operationsActivities: d.operationsActivities.map((a) => (a.id === id ? completed : a)),
         }
 
-        // Storage & handling movement for inbound/outbound activity types
         if (act.storageType === 'inbound' || act.storageType === 'outbound') {
           const mov = {
             id: uid('mov'), customer: act.customerName, date: completed.date, reference: act.customerRef,
@@ -581,7 +633,6 @@ export function StoreProvider({ children }) {
           }
           next = { ...next, pendingAssignments: [pend, ...next.pendingAssignments] }
         } else {
-          // Finish closes matching open pending assignments
           next = {
             ...next,
             pendingAssignments: next.pendingAssignments.map((p) =>
@@ -674,20 +725,44 @@ export function StoreProvider({ children }) {
     [update, logEntry, session, toast],
   )
 
-  /** Map of billed line id -> {billedBy, billedDate} */
   const billedMap = useMemo(() => {
+    if (!db) return new Map()
     const m = new Map()
     for (const r of db.billedRecords) for (const lid of r.lineIds) m.set(lid, { billedBy: r.billedBy, billedDate: r.billedDate, periodKey: r.periodKey })
     return m
-  }, [db.billedRecords])
+  }, [db?.billedRecords])
 
   // ---- Danger zone -----------------------------------------------------------
 
   const resetDb = useCallback(() => {
     const fresh = seedDb()
     setDb(fresh)
+    resetDbApi(fresh).catch((err) => console.error('Failed to reset on server:', err))
     toast('Database reset to seed data', 'info')
   }, [toast])
+
+  // ---- Loading state ---------------------------------------------------------
+
+  if (dbError) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '1rem' }}>
+        <h2 style={{ color: '#c00' }}>Failed to connect to database</h2>
+        <p>{dbError}</p>
+        <p style={{ color: '#666' }}>Make sure the API server is running (npm run dev)</p>
+        <button onClick={() => window.location.reload()} style={{ padding: '0.5rem 1.5rem', cursor: 'pointer' }}>Retry</button>
+      </div>
+    )
+  }
+
+  if (!dbReady || !db) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ width: 40, height: 40, border: '4px solid #e0e0e0', borderTopColor: '#f0511c', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <p style={{ color: '#666' }}>Connecting to database...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+      </div>
+    )
+  }
 
   const value = {
     db, update, upsert, remove,
