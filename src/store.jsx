@@ -577,7 +577,7 @@ export function StoreProvider({ children }) {
             truckCount: payload.handlingMode === 'Loose' ? null : num(payload.truckCount),
             packageQty: num(payload.packageQty), packageUom: payload.packageUom,
             packageLines: payload.packageLines || null,
-            storageDays: null, sourceActivityId: id,
+            storageDays: null, sourceActivityId: id, applyHandling: true,
           }
           next = { ...next, storageMovements: [mov, ...next.storageMovements] }
           next = logEntry(

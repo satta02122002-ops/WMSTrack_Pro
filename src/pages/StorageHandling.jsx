@@ -8,13 +8,15 @@ import { exportXlsx } from '../excel.js'
 
 function MovementModal({ movement, onClose }) {
   const { db, upsert, toast } = useStore()
-  const [m, setM] = useState(
-    movement || {
+  const [m, setM] = useState(() => {
+    const base = movement || {
       customer: '', date: todayISO(), reference: '', type: 'Inbound', cbm: '',
       storage: '', handlingMode: '', containerSize: '', truckCount: '1',
       storageDays: '',
-    },
-  )
+    }
+    // Legacy/auto movements have no flag; treat undefined as "bill handling".
+    return { ...base, applyHandling: base.applyHandling !== false }
+  })
   const [pkgLines, setPkgLines] = useState(
     movement?.packageLines?.length
       ? movement.packageLines.map((l) => ({ qty: String(l.qty), uom: l.uom }))
@@ -41,6 +43,7 @@ function MovementModal({ movement, onClose }) {
       truckCount: needsVehicle ? num(m.truckCount) : null,
       containerSize: needsVehicle ? m.containerSize : null,
       handlingMode: m.handlingMode || null,
+      applyHandling: !!m.applyHandling,
       packageLines: cleanPkgs,
       packageQty: cleanPkgs ? qtyLinesTotal(cleanPkgs) : null,
       packageUom: cleanPkgs && cleanPkgs.length === 1 ? cleanPkgs[0].uom : null,
@@ -98,6 +101,13 @@ function MovementModal({ movement, onClose }) {
           <input type="number" min="1" value={m.storageDays ?? ''} onChange={setE('storageDays')} />
         </Field>
       </div>
+      <label className="checkbox-row" style={{ marginTop: 4, padding: '10px 12px', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', borderRadius: 8 }}>
+        <input type="checkbox" checked={!!m.applyHandling} onChange={(e) => setM((s) => ({ ...s, applyHandling: e.target.checked }))} />
+        <span>
+          <b>Add Handling Charges</b> — when ticked, handling is billed from the selected handling mode
+          and the customer's configured rates. Untick to record the movement without any handling charge.
+        </span>
+      </label>
       <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink-700)', textTransform: 'uppercase', letterSpacing: 0.4, margin: '4px 0 8px' }}>
         Packages (optional) — add a line per UOM
       </p>
@@ -283,7 +293,24 @@ export default function StorageHandling() {
         truckCount: row.truckCount === '' ? null : num(row.truckCount),
         packageQty: row.packageQty === '' ? null : num(row.packageQty), packageUom: row.packageUom || null,
         storageDays: row.storageDays === '' ? null : num(row.storageDays), sourceActivityId: null,
+        applyHandling: !/^\s*(no|false|0)\s*$/i.test(String(row.applyHandling ?? '')),
       }, { entityType: 'Storage', label: 'storage movement (import)' })
+      imported++
+    }
+    return { imported, skipped }
+  }
+
+  function importManualHandling(rows) {
+    let imported = 0, skipped = 0
+    for (const row of rows) {
+      if (!row.customer || !row.date || !row.description || !num(row.quantity) || !num(row.charges)) { skipped++; continue }
+      const cust = db.customers.find((c) => c.name === String(row.customer))
+      upsert('handlingCharges', {
+        customerName: String(row.customer), date: String(row.date).slice(0, 10),
+        reference: String(row.reference || ''), description: String(row.description),
+        quantity: num(row.quantity), charges: num(row.charges),
+        currency: String(row.currency || '') || cust?.currency || '',
+      }, { entityType: 'Handling', label: 'manual handling charge (import)' })
       imported++
     }
     return { imported, skipped }
@@ -298,8 +325,21 @@ export default function StorageHandling() {
         Trucks: m.truckCount || '', 'Package Qty': m.packageLines?.length > 1 ? pkgDisplay(m) : m.packageQty || '',
         'Package UOM': m.packageLines?.length > 1 ? 'Multi' : m.packageUom || '',
         'Storage Days': m.storageDays ?? 'auto',
+        'Handling Billed': m.handlingMode ? (m.applyHandling === false ? 'no' : 'yes') : '',
       })),
       'Storage Movements',
+    )
+  }
+
+  function exportManualHandling() {
+    exportXlsx(
+      'manual_handling_charges.xlsx',
+      manualCharges.map((h) => ({
+        Date: h.date, Customer: h.customerName, Reference: h.reference || '',
+        Description: h.description, Quantity: h.quantity, 'Charge/Unit': h.charges,
+        Total: round2(num(h.quantity) * num(h.charges)), Currency: h.currency,
+      })),
+      'Manual Handling',
     )
   }
 
@@ -375,7 +415,11 @@ export default function StorageHandling() {
         <div className="card">
           <div className="spread" style={{ marginBottom: 12 }}>
             <div className="card-title" style={{ marginBottom: 0 }}>Manual Handling Charges</div>
-            <button className="btn btn-sm btn-primary" onClick={() => setManualModal('new')}>＋ New Handling Charge</button>
+            <div className="row">
+              <ImportButton kind="handlingCharges" onRows={importManualHandling} />
+              <button className="btn btn-sm btn-ghost" onClick={exportManualHandling} disabled={!manualCharges.length}>⬇ Export</button>
+              <button className="btn btn-sm btn-primary" onClick={() => setManualModal('new')}>＋ New Handling Charge</button>
+            </div>
           </div>
           {manualCharges.length === 0 ? (
             <EmptyState icon="🚛" title="No manual handling charges" hint="Add an ad-hoc handling charge when a job needs manual billing outside the movement-based handling rates. These flow into Reports and Monthly Billing as Handling." />

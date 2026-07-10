@@ -89,9 +89,15 @@ export const IMPORT_TEMPLATES = {
   },
   storageMovements: {
     label: 'Storage Movements',
-    headers: ['customer', 'date', 'reference', 'type', 'cbm', 'storage', 'handlingMode', 'containerSize', 'truckCount', 'packageQty', 'packageUom', 'storageDays'],
-    sample: [{ customer: 'Example Customer Ltd', date: '2026-07-01', type: 'Inbound', reference: 'REF-001', cbm: 25, storage: 'Normal Storage', handlingMode: 'Container', containerSize: '40ft', truckCount: 1, packageQty: 100, packageUom: 'CTN', storageDays: '' }],
-    note: 'type: Inbound or Outbound; handlingMode: Container, Trailer or Loose; date in YYYY-MM-DD',
+    headers: ['customer', 'date', 'reference', 'type', 'cbm', 'storage', 'handlingMode', 'containerSize', 'truckCount', 'packageQty', 'packageUom', 'storageDays', 'applyHandling'],
+    sample: [{ customer: 'Example Customer Ltd', date: '2026-07-01', type: 'Inbound', reference: 'REF-001', cbm: 25, storage: 'Normal Storage', handlingMode: 'Container', containerSize: '40ft', truckCount: 1, packageQty: 100, packageUom: 'CTN', storageDays: '', applyHandling: 'yes' }],
+    note: 'type: Inbound or Outbound; handlingMode: Container, Trailer or Loose; date in YYYY-MM-DD; applyHandling: yes/no (default yes) — whether to bill handling charges',
+  },
+  handlingCharges: {
+    label: 'Manual Handling Charges',
+    headers: ['customer', 'date', 'reference', 'description', 'quantity', 'charges', 'currency'],
+    sample: [{ customer: 'Example Customer Ltd', date: '2026-07-01', reference: 'JOB-001', description: 'Special repack handling', quantity: 3, charges: 20, currency: 'USD' }],
+    note: 'customer must match an existing customer; total billed = quantity x charges; date in YYYY-MM-DD',
   },
 }
 

@@ -101,8 +101,10 @@ export function computeBillingLines(db, period) {
       storageDays: days, rateMissing: !sr,
     })
 
-    // Handling line
-    if (m.handlingMode) {
+    // Handling line — auto movements (from operations) always bill; manual
+    // movements only when "Add Handling Charges" was ticked (applyHandling).
+    // Legacy movements have no flag, so undefined is treated as apply.
+    if (m.handlingMode && m.applyHandling !== false) {
       const hr = db.handlingRates.find((r) => r.customer === m.customer)
       // Customers flagged billByCbm are always charged CBM x rate, even when the
       // cargo moved by container/trailer (the operational details are still kept).
