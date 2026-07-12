@@ -164,6 +164,10 @@ export function StoreProvider({ children }) {
   const baselineRef = useRef(null) // last state known to match the server
   const saveTimerRef = useRef(null)
   const initialLoadRef = useRef(true)
+  // Bumped on every authoritative state replacement (login, reset, clear).
+  // In-flight polls/saves that started before the bump are discarded, so a
+  // stale fetch can't overwrite a fresh reset/clear.
+  const epochRef = useRef(0)
 
   // Load database from API on mount (only if we have a token)
   useEffect(() => {
@@ -214,9 +218,11 @@ export function StoreProvider({ children }) {
     setSaveStatus('saving')
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     const snapshot = db
+    const epoch = epochRef.current
     saveTimerRef.current = setTimeout(() => {
       syncDbToApi(changes)
         .then(() => {
+          if (epoch !== epochRef.current) return // reset/clear happened — don't restore a stale baseline
           baselineRef.current = snapshot
           setSaveStatus('saved')
         })
@@ -244,8 +250,10 @@ export function StoreProvider({ children }) {
     const interval = setInterval(() => {
       if (initialLoadRef.current || !dbRef.current) return
       if (computeChanges(baselineRef.current, dbRef.current)) return // dirty; wait
+      const epoch = epochRef.current
       fetchDbFromApi()
         .then(({ data }) => {
+          if (epoch !== epochRef.current) return // reset/clear/login happened during the fetch — discard stale data
           if (!data || !Array.isArray(data.users)) return
           if (computeChanges(baselineRef.current, dbRef.current)) return // changed while fetching
           baselineRef.current = data
@@ -344,6 +352,7 @@ export function StoreProvider({ children }) {
 
         const dbRes = await fetchDbFromApi()
         if (dbRes.data && typeof dbRes.data === 'object') {
+          epochRef.current++
           baselineRef.current = dbRes.data
           setDb(ensureDefaults(dbRes.data, result.user.role)) // baseline lacks any backfill, so it syncs on first change
           initialLoadRef.current = false
@@ -781,6 +790,17 @@ export function StoreProvider({ children }) {
 
   // ---- Danger zone -----------------------------------------------------------
 
+  // Apply an authoritative full replacement of the database (reset/clear):
+  // cancel any pending save, bump the epoch so in-flight polls/saves are
+  // discarded, and set both db and baseline to the returned state.
+  const applyAuthoritativeState = useCallback((data) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    epochRef.current++
+    baselineRef.current = data
+    setDb(data)
+    setSaveStatus('saved')
+  }, [])
+
   const resetDb = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/db/reset`, {
@@ -793,14 +813,17 @@ export function StoreProvider({ children }) {
         return
       }
       if (result.data) {
-        baselineRef.current = result.data
-        setDb(result.data)
+        applyAuthoritativeState(result.data)
+        // Reset re-seeds users with new ids; re-point the session to the new
+        // record for the same userId so the reset does not log us out.
+        const me = result.data.users?.find((u) => u.userId?.toLowerCase() === session?.userId?.toLowerCase())
+        if (me) setSession((s) => (s ? { ...s, userRecordId: me.id } : s))
       }
       toast('Database reset to seed data', 'info')
     } catch {
       toast('Failed to reset database', 'error')
     }
-  }, [toast])
+  }, [toast, session, applyAuthoritativeState])
 
   const clearDemoData = useCallback(async () => {
     try {
@@ -813,15 +836,12 @@ export function StoreProvider({ children }) {
         toast(result.error || 'Failed to clear demo data', 'error')
         return
       }
-      if (result.data) {
-        baselineRef.current = result.data
-        setDb(result.data)
-      }
+      if (result.data) applyAuthoritativeState(result.data)
       toast('Demo transactions and master data cleared', 'info')
     } catch {
       toast('Failed to clear demo data', 'error')
     }
-  }, [toast])
+  }, [toast, applyAuthoritativeState])
 
   const listBackups = useCallback(async () => {
     try {
