@@ -122,7 +122,9 @@ export function computeBillingLines(db, period) {
       lines.push({
         id: `sto:${m.id}:${dayIso}`,
         source: 'storage', reportType: 'Storage',
-        customerName: m.customer, date: dayIso, customerRef: m.reference,
+        // Show the customer reference only on the movement's own date; leave the
+        // following storage days blank so it isn't repeated on every row.
+        customerName: m.customer, date: dayIso, customerRef: dayIso === m.date ? m.reference : '',
         activity: inbound ? 'Storage In' : 'Storage Out',
         handlingType: m.storage || '', vehicleType: '', truckCount: '',
         cbmQty: num(m.cbm), packageQty: m.packageQty || '', packageUom: pkgUom, packageDetail: pkgDetail,

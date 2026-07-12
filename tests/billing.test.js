@@ -21,6 +21,9 @@ test('storage bills one line per day: rate x CBM per day', () => {
   assert.deepEqual(storage.map((l) => l.date), ['2026-07-05', '2026-07-06', '2026-07-07', '2026-07-08'])
   storage.forEach((l) => assert.equal(l.totalValue, 5)) // 10 * 0.5
   assert.equal(storage.reduce((s, l) => s + l.totalValue, 0), 20)
+  // customer reference shows only on the movement's own date, blank after
+  assert.equal(storage[0].customerRef, 'R')
+  assert.deepEqual(storage.slice(1).map((l) => l.customerRef), ['', '', ''])
 })
 
 test('storage monthly minimum tops up the shortfall', () => {
