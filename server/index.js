@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 import { getState, setState, applyChangesTx } from './db.js'
 import { hashPassword, verifyPassword, isLegacyHash, signToken, authMiddleware, validatePassword } from './auth.js'
 import { seedDb } from './seed.js'
+import { filterAuthorizedChanges } from './authz.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PORT || 3001
@@ -237,13 +238,19 @@ app.post('/api/db/sync', authMiddleware, async (req, res) => {
     if (!changes || typeof changes !== 'object' || Array.isArray(changes)) {
       return res.status(400).json({ error: 'Missing or invalid changes' })
     }
-    // Authorization: only Admin/Developer may write the users collection.
-    // Without this, any authenticated client could sync a users change and
-    // escalate its own role (e.g. to Developer) or tamper with other accounts.
-    if ('users' in changes && !['Admin', 'Developer'].includes(req.user.role)) {
-      return res.status(403).json({ error: 'You are not allowed to modify users' })
+    // Authorization: apply only the collections this role may write; drop the
+    // rest (e.g. a User cannot escalate via `users`, or edit master data/rates).
+    // Stripping rather than rejecting keeps a legitimate multi-collection save
+    // from failing wholesale; denied writes never persist and revert on poll.
+    const { allowed, denied } = filterAuthorizedChanges(changes, req.user.role)
+    if (denied.length) {
+      console.warn(`sync: denied ${req.user.role} write to [${denied.join(', ')}] by ${req.user.userId}`)
     }
-    const result = await applyChangesTx(changes)
+    if (Object.keys(allowed).length === 0) {
+      const current = await getState()
+      return res.json({ ok: true, version: current?.version || 0, data: stripPasswordHashes(current?.data || {}) })
+    }
+    const result = await applyChangesTx(allowed)
     if (!result) return res.status(500).json({ error: 'Database not initialized' })
     res.json({ ok: true, version: result.version, data: stripPasswordHashes(result.data) })
   } catch (err) {

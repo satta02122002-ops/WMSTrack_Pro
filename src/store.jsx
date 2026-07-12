@@ -123,9 +123,11 @@ function computeChanges(baseline, current) {
 
 // Backfill reference lists added after a database was first created, so legacy
 // documents (missing the key entirely) get sensible defaults. Only runs when
-// the key is absent — an intentionally emptied list is left alone.
-function ensureDefaults(data) {
-  if (data && !Array.isArray(data.storageTypes)) {
+// the key is absent — an intentionally emptied list is left alone — and only
+// for Admin/Developer, who are authorized to write reference collections
+// (other roles fall back to defaults in the dropdowns without persisting).
+function ensureDefaults(data, role) {
+  if (data && !Array.isArray(data.storageTypes) && ['Admin', 'Developer'].includes(role)) {
     return {
       ...data,
       storageTypes: ['Normal Storage', 'Cold Storage', 'Bonded Storage'].map((name) => ({ id: uid('sty'), name })),
@@ -178,7 +180,7 @@ export function StoreProvider({ children }) {
         if (cancelled) return
         if (data && typeof data === 'object' && Array.isArray(data.users)) {
           baselineRef.current = data
-          setDb(ensureDefaults(data)) // baseline lacks any backfill, so it syncs on first change
+          setDb(ensureDefaults(data, session?.role)) // baseline lacks any backfill, so it syncs on first change
         }
         setDbReady(true)
         setTimeout(() => { initialLoadRef.current = false }, 100)
@@ -343,7 +345,7 @@ export function StoreProvider({ children }) {
         const dbRes = await fetchDbFromApi()
         if (dbRes.data && typeof dbRes.data === 'object') {
           baselineRef.current = dbRes.data
-          setDb(ensureDefaults(dbRes.data)) // baseline lacks any backfill, so it syncs on first change
+          setDb(ensureDefaults(dbRes.data, result.user.role)) // baseline lacks any backfill, so it syncs on first change
           initialLoadRef.current = false
         }
 

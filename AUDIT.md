@@ -32,7 +32,7 @@ A first automated **test suite (17 tests)** and a **CI pipeline** were added;
 | Frontend | 82 / 100 |
 | Backend | 74 / 100 |
 | Database | 45 / 100 |
-| Security | 80 / 100 |
+| Security | 86 / 100 |
 | Performance | 66 / 100 |
 | Maintainability | 80 / 100 |
 | UI / UX | 84 / 100 |
@@ -63,17 +63,20 @@ needs a larger decision).
 
 ### High
 
-**H1 — Broad write authorization on sync** · _Mitigated / Pending_
-- Any authenticated user can still write non-`users` collections (master data,
-  rates, billing) via the API regardless of their UI page access. Page-level
-  RBAC is enforced client-side only.
-- **Risk:** a low-privilege user could tamper with rates/master data by calling
-  the API directly.
-- **Recommended path:** move from a single generic sync endpoint to
-  resource-scoped endpoints (or a server-side collection→role policy map).
-  Deferred because a naive per-collection block would break legitimate flows
-  (e.g. a `User` ending an activity legitimately writes `operationsActivities`,
-  `storageMovements`, and `auditLog`). The crown-jewel case (`users`) is fixed.
+**H1 — Broad write authorization on sync** · _Fixed_
+- **Problem:** any authenticated user could write any collection (master data,
+  rates, billing) via `/api/db/sync` regardless of UI page access; page RBAC
+  was client-side only.
+- **Fix:** added a server-side per-collection write policy (`server/authz.js`,
+  whitelist). Master data, rates, billing, settings and users require
+  Admin/Developer; handling charges also allow Supervisor; the operational
+  collections (`operationsActivities`, `storageMovements`, `attendance`,
+  `auditLog`) allow all roles because legitimate execution flows write them.
+  The sync endpoint applies only the authorized subset and logs denials, so a
+  legitimate multi-collection save never fails wholesale and unauthorized
+  writes never persist (they revert on the next poll). The client `storageTypes`
+  backfill is now gated to Admin/Developer so non-privileged clients don't emit
+  a denied change. Covered by unit tests.
 
 **H2 — `xlsx` dependency has an unpatched high-severity advisory** · _Pending (mitigated)_
 - Prototype pollution + ReDoS in SheetJS; `npm audit` reports **no fix
