@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { uid, todayISO, nowISO, activityDuration, round2, num } from './utils.js'
 
 const SESSION_KEY = 'wmstrack_pro_session_v1'

@@ -1,4 +1,4 @@
-import React, { Component, Suspense, lazy, useEffect, useState } from 'react'
+import { Component, Suspense, lazy, useEffect, useState } from 'react'
 import { useStore, pagesForUser } from './store.jsx'
 import Layout from './components/Layout.jsx'
 import Login from './pages/Login.jsx'

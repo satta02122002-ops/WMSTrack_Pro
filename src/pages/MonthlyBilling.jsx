@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, EmptyState, StatusBadge } from '../components/ui.jsx'
 import { fmtDate, fmtNum, num, round2, todayISO, monthName } from '../utils.js'

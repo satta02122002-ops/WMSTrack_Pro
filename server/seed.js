@@ -8,7 +8,6 @@ function toISODate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function todayISO() { return toISODate(new Date()) }
 function nowISO() { return new Date().toISOString() }
 function round2(v) { return Math.round((parseFloat(v) || 0) * 100) / 100 }
 

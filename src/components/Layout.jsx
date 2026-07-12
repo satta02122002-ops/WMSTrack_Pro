@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useStore, PAGES, pagesForUser } from '../store.jsx'
 import { Modal, Field } from './ui.jsx'
 import Logo from './Logo.jsx'

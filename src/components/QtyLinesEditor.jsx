@@ -1,4 +1,3 @@
-import React from 'react'
 import { Field, Select } from './ui.jsx'
 import { num } from '../utils.js'
 

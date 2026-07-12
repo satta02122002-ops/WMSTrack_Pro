@@ -1,4 +1,3 @@
-import React from 'react'
 
 /**
  * Integrated Service Solutions mark — thin orange arc (open to the right)

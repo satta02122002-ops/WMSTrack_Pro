@@ -38,7 +38,7 @@ A first automated **test suite (17 tests)** and a **CI pipeline** were added;
 | UI / UX | 84 / 100 |
 | Warehouse workflow | 62 / 100 |
 | Scalability | 50 / 100 |
-| Code quality | 78 / 100 |
+| Code quality | 84 / 100 |
 | **Overall** | **70 / 100** |
 
 ## Findings
@@ -147,8 +147,11 @@ needs a larger decision).
 
 ### Low
 
-- **L1 — No ESLint/Prettier config** · _Pending_ — no automated lint gate; add a
-  flat ESLint config.
+- **L1 — No ESLint config** · _Fixed_ — added a flat ESLint config (JS
+  recommended + React + React Hooks, browser/node scoped), `npm run lint` /
+  `lint:fix` scripts, and a Lint step in CI. Fixed everything it flagged
+  (removed unused `React` imports now that the JSX runtime is used, plus a dead
+  helper). Lint passes clean.
 - **L2 — CI/CD absent** · _Fixed_ — added `.github/workflows/ci.yml` running
   `npm ci → npm test → npm run build` on every push/PR.
 - **L3 — SSRF surface** · _Accepted_ — the admin-configured external billing API

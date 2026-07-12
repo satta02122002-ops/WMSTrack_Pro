@@ -1,4 +1,3 @@
-import React from 'react'
 
 /** Warehouse / contract-logistics silhouette scene for the login background. */
 export default function WarehouseBackdrop() {

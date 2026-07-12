@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useStore, REMEMBER_KEY } from '../store.jsx'
 import { Field } from '../components/ui.jsx'
 import Logo from '../components/Logo.jsx'

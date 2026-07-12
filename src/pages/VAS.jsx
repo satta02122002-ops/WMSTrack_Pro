@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Field, Select, EmptyState } from '../components/ui.jsx'
 import { fmtDate, fmtNum, num, round2, todayISO } from '../utils.js'
