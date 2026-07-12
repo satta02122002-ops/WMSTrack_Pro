@@ -32,7 +32,7 @@ A first automated **test suite (17 tests)** and a **CI pipeline** were added;
 | Frontend | 82 / 100 |
 | Backend | 74 / 100 |
 | Database | 55 / 100 |
-| Security | 86 / 100 |
+| Security | 88 / 100 |
 | Performance | 66 / 100 |
 | Maintainability | 80 / 100 |
 | UI / UX | 84 / 100 |
@@ -78,14 +78,20 @@ needs a larger decision).
   backfill is now gated to Admin/Developer so non-privileged clients don't emit
   a denied change. Covered by unit tests.
 
-**H2 — `xlsx` dependency has an unpatched high-severity advisory** · _Pending (mitigated)_
-- Prototype pollution + ReDoS in SheetJS; `npm audit` reports **no fix
-  available** on the npm-published package.
-- **Mitigation today:** import is an admin-only action on trusted files.
-- **Recommended fix:** install SheetJS from its official distribution
-  (`https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz`), which is the
-  maintained build, or isolate parsing. Not swapped in this pass to avoid an
-  untested dependency-source change.
+**H2 — `xlsx` dependency high-severity advisory** · _Fixed_
+- Prototype pollution + ReDoS affected the abandoned npm `xlsx@0.18.5`; npm had
+  no fix and SheetJS's official CDN is blocked by this environment's egress
+  policy.
+- **Fix:** swapped to patched SheetJS **0.20.3** via the maintained npm
+  republish (`xlsx` aliased to `@e965/xlsx@^0.20.3` in package.json), so all
+  imports stay `from 'xlsx'` with no code changes. `npm audit` now reports **0
+  vulnerabilities**; build and tests pass.
+- **Note:** this is a community republish of SheetJS CE's patched code (used
+  because SheetJS left npm and their CDN is blocked here). If preferred, repoint
+  the dependency to the official `cdn.sheetjs.com` tarball from an environment
+  whose egress allows it — the code is identical.
+- **Residual context:** parsing is client-side and admin-only, so practical
+  exposure was already low (not a server ingesting untrusted uploads).
 
 **H3 — No automated tests** · _Fixed_
 - Added 17 unit tests (Node's built-in runner, no new dependencies) covering the
