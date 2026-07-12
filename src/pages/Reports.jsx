@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Select, EmptyState, StatusBadge } from '../components/ui.jsx'
-import { fmtDate, fmtDuration, fmtNum, num, round2, todayISO, qtyDisplay, monthKey, firstOfMonthISO } from '../utils.js'
+import { fmtDate, fmtDuration, fmtNum, num, round2, todayISO, qtyDisplay, monthKey, firstOfMonthISO, accountHolderOf, accountHolderNames } from '../utils.js'
 import { exportXlsx, exportCsv } from '../excel.js'
 import { computeBillingLines } from '../billing.js'
 import { ManualActivityModal } from './OperationsMonitor.jsx'
@@ -13,22 +13,23 @@ export default function Reports() {
   const [from, setFrom] = useState(firstOfMonthISO())
   const [to, setTo] = useState(todayISO())
   const [customer, setCustomer] = useState('')
+  const [accountHolder, setAccountHolder] = useState('')
   const [editActivity, setEditActivity] = useState(null)
 
   const inRange = (d) => (!from || d >= from) && (!to || d <= to)
-  const custOk = (c) => !customer || c === customer
+  const custOk = (c) => (!customer || c === customer) && (!accountHolder || accountHolderOf(db, c) === accountHolder)
 
   const operations = useMemo(
     () =>
       db.operationsActivities
         .filter((a) => a.status === 'complete' && inRange(a.date) && custOk(a.customerName))
         .sort((a, b) => b.date.localeCompare(a.date)),
-    [db.operationsActivities, from, to, customer],
+    [db.operationsActivities, from, to, customer, accountHolder],
   )
 
   const movements = useMemo(
     () => db.storageMovements.filter((m) => inRange(m.date) && custOk(m.customer)).sort((a, b) => b.date.localeCompare(a.date)),
-    [db.storageMovements, from, to, customer],
+    [db.storageMovements, from, to, customer, accountHolder],
   )
 
   // handling charge detail comes from the billing engine for consistent rates
@@ -42,7 +43,7 @@ export default function Reports() {
 
   const vas = useMemo(
     () => db.vasCharges.filter((v) => inRange(v.date) && custOk(v.customerName)).sort((a, b) => b.date.localeCompare(a.date)),
-    [db.vasCharges, from, to, customer],
+    [db.vasCharges, from, to, customer, accountHolder],
   )
 
   const exports = {
@@ -96,6 +97,7 @@ export default function Reports() {
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
             <Select value={customer} onChange={setCustomer} options={db.customers.map((c) => c.name)} placeholder="All customers" style={{ width: 190 }} />
+            <Select value={accountHolder} onChange={setAccountHolder} options={accountHolderNames(db)} placeholder="All account holders" style={{ width: 190 }} />
           </div>
           <div className="row">
             <button className="btn btn-sm btn-outline" onClick={() => doExport('xlsx')}>⬇ Excel</button>

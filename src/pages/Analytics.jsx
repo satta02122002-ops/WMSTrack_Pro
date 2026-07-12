@@ -6,7 +6,7 @@ import {
 import { Bar, Line, Pie, Doughnut, Bubble, Radar } from 'react-chartjs-2'
 import { useStore } from '../store.jsx'
 import { KPI, EmptyState, Select, Field } from '../components/ui.jsx'
-import { fmtNum, num, round2, todayISO, toISODate, monthKey } from '../utils.js'
+import { fmtNum, num, round2, todayISO, toISODate, monthKey, accountHolderOf, accountHolderNames } from '../utils.js'
 import { computeBillingLines } from '../billing.js'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement, RadialLinearScale, Tooltip, Legend, Filler)
@@ -41,19 +41,23 @@ export default function Analytics() {
   const [from, setFrom] = useState(daysAgo(30))
   const [to, setTo] = useState(todayISO())
   const [customerFilter, setCustomerFilter] = useState('')
+  const [accountHolderFilter, setAccountHolderFilter] = useState('')
   const [activityFilter, setActivityFilter] = useState('')
 
   const data = useMemo(() => {
     const inRange = (d) => (!from || d >= from) && (!to || d <= to)
+    const ahOk = (c) => !accountHolderFilter || accountHolderOf(db, c) === accountHolderFilter
     const acts = db.operationsActivities.filter((a) => {
       if (a.status !== 'complete' || !inRange(a.date)) return false
       if (customerFilter && a.customerName !== customerFilter) return false
+      if (!ahOk(a.customerName)) return false
       if (activityFilter && a.type !== activityFilter) return false
       return true
     })
     const movements = db.storageMovements.filter((m) => {
       if (!inRange(m.date)) return false
       if (customerFilter && m.customer !== customerFilter) return false
+      if (!ahOk(m.customer)) return false
       return true
     })
     const attendance = db.attendance.filter((a) => inRange(a.date))
@@ -64,6 +68,7 @@ export default function Analytics() {
     for (const p of periods) billLines.push(...computeBillingLines(db, p).filter((l) => {
       if (!inRange(l.date)) return false
       if (customerFilter && l.customerName !== customerFilter) return false
+      if (!ahOk(l.customerName)) return false
       if (activityFilter && l.source === 'activity' && l.activity !== activityFilter) return false
       return true
     }))
@@ -154,7 +159,7 @@ export default function Analytics() {
         activeUsers: new Set(attendance.map((a) => a.userId)).size,
       },
     }
-  }, [db, from, to, customerFilter, activityFilter])
+  }, [db, from, to, customerFilter, accountHolderFilter, activityFilter])
 
   const k = data.kpis
   const typeLabels = [...data.byType.keys()]
@@ -171,6 +176,7 @@ export default function Analytics() {
             <Field label="From"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
             <Field label="To"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
             <Field label="Customer"><Select value={customerFilter} onChange={setCustomerFilter} options={db.customers.map((c) => c.name)} placeholder="All customers" /></Field>
+            <Field label="Account Holder"><Select value={accountHolderFilter} onChange={setAccountHolderFilter} options={accountHolderNames(db)} placeholder="All account holders" /></Field>
             <Field label="Activity"><Select value={activityFilter} onChange={setActivityFilter} options={db.activitiesMaster.map((a) => a.name)} placeholder="All activities" /></Field>
           </div>
           <EmptyState icon="📊" title="No data in this date range" hint="Complete some activities or widen the range." />
@@ -191,6 +197,7 @@ export default function Analytics() {
           <Field label="From"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
           <Field label="To"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
           <Field label="Customer"><Select value={customerFilter} onChange={setCustomerFilter} options={db.customers.map((c) => c.name)} placeholder="All customers" /></Field>
+          <Field label="Account Holder"><Select value={accountHolderFilter} onChange={setAccountHolderFilter} options={accountHolderNames(db)} placeholder="All account holders" /></Field>
           <Field label="Activity"><Select value={activityFilter} onChange={setActivityFilter} options={db.activitiesMaster.map((a) => a.name)} placeholder="All activities" /></Field>
         </div>
       </div>

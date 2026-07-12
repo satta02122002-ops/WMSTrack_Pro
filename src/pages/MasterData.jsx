@@ -8,13 +8,13 @@ import { exportXlsx } from '../excel.js'
 
 function CustomerModal({ record, onClose }) {
   const { db, upsert, toast } = useStore()
-  const [r, setR] = useState(record || { name: '', currency: 'USD', references: [] })
+  const [r, setR] = useState(record || { name: '', currency: 'USD', accountHolder: '', references: [] })
   const [refsText, setRefsText] = useState((record?.references || []).join('\n'))
   const valid = r.name.trim() && r.currency
 
   function save() {
     upsert('customers', {
-      ...r, name: r.name.trim(),
+      ...r, name: r.name.trim(), accountHolder: r.accountHolder || '',
       references: refsText.split('\n').map((s) => s.trim()).filter(Boolean),
     }, { entityType: 'Master Data', label: 'customer' })
     toast('Customer saved')
@@ -29,6 +29,9 @@ function CustomerModal({ record, onClose }) {
       </Field>
       <Field label="Currency" required>
         <Select value={r.currency} onChange={(v) => setR((s) => ({ ...s, currency: v }))} options={db.currencies.map((c) => c.name)} />
+      </Field>
+      <Field label="Account holder" hint="Managed under Parameter → Account Holders">
+        <Select value={r.accountHolder || ''} onChange={(v) => setR((s) => ({ ...s, accountHolder: v }))} options={db.accountHolders?.map((a) => a.name) || []} placeholder="None" />
       </Field>
       <Field label="References" hint="One reference per line — offered as suggestions in Operations Execution">
         <textarea rows={4} value={refsText} onChange={(e) => setRefsText(e.target.value)} placeholder={'PO-1001\nPO-1002'} />
@@ -157,6 +160,7 @@ export default function MasterData() {
       const existing = db.customers.find((c) => c.name.toLowerCase() === String(row.name).toLowerCase())
       upsert('customers', {
         ...(existing || {}), name: String(row.name), currency: String(row.currency || 'USD'),
+        accountHolder: String(row.accountHolder || existing?.accountHolder || ''),
         references: String(row.references || '').split(/[;,]/).map((s) => s.trim()).filter(Boolean),
       }, { entityType: 'Master Data', label: 'customer (import)' })
       imported++
@@ -235,19 +239,20 @@ export default function MasterData() {
             <div className="card-title" style={{ marginBottom: 0 }}>Customers</div>
             <div className="row">
               <ImportButton kind="customers" onRows={importCustomers} />
-              <button className="btn btn-sm btn-ghost" disabled={!db.customers.length} onClick={() => exportXlsx('customers.xlsx', db.customers.map((c) => ({ name: c.name, currency: c.currency, references: (c.references || []).join(';') })), 'Customers')}>⬇ Export</button>
+              <button className="btn btn-sm btn-ghost" disabled={!db.customers.length} onClick={() => exportXlsx('customers.xlsx', db.customers.map((c) => ({ name: c.name, currency: c.currency, accountHolder: c.accountHolder || '', references: (c.references || []).join(';') })), 'Customers')}>⬇ Export</button>
               <button className="btn btn-sm btn-primary" onClick={() => open('customer')}>＋ New Customer</button>
             </div>
           </div>
           {db.customers.length === 0 ? <EmptyState icon="🏢" title="No customers yet" hint="Add customers before running operations." /> : (
             <div className="table-wrap">
               <table className="data">
-                <thead><tr><th>Name</th><th>Currency</th><th>References</th><th></th></tr></thead>
+                <thead><tr><th>Name</th><th>Currency</th><th>Account Holder</th><th>References</th><th></th></tr></thead>
                 <tbody>
                   {db.customers.map((c) => (
                     <tr key={c.id}>
                       <td><b>{c.name}</b></td>
                       <td>{c.currency}</td>
+                      <td>{c.accountHolder || '—'}</td>
                       <td>{(c.references || []).join(', ') || '—'}</td>
                       <td>
                         <div className="row" style={{ gap: 5, flexWrap: 'nowrap' }}>

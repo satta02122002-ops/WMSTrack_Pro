@@ -284,6 +284,7 @@ app.post('/api/db/clear-demo-data', authMiddleware, async (req, res) => {
     const data = {
       ...current.data,
       customers: [],
+      accountHolders: [],
       activitiesMaster: [],
       uoms: [],
       currencies: [],

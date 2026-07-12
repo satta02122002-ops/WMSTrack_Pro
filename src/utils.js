@@ -86,6 +86,16 @@ export function passwordPolicyError(password) {
 
 export const DEFAULT_STORAGE_TYPES = ['Normal Storage', 'Cold Storage', 'Bonded Storage']
 
+// Account holders (customer account managers) — a managed reference list.
+export function accountHolderNames(db) {
+  return (db.accountHolders || []).map((a) => a.name)
+}
+
+/** The account holder assigned to a customer (by customer name), or ''. */
+export function accountHolderOf(db, customerName) {
+  return (db.customers || []).find((c) => c.name === customerName)?.accountHolder || ''
+}
+
 /**
  * Storage-type options for dropdowns: the managed Parameter list, unioned with
  * any types already used on storage rates, falling back to the defaults so the

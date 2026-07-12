@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
 import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
-import { activityDuration, fmtDuration, fmtDate, fmtTime, todayISO, nowISO, uid, num, qtyDisplay, storageTypeNames } from '../utils.js'
+import { activityDuration, fmtDuration, fmtDate, fmtTime, todayISO, nowISO, uid, num, qtyDisplay, storageTypeNames, accountHolderOf, accountHolderNames } from '../utils.js'
 import { exportXlsx } from '../excel.js'
 
 function linesFrom(record, qtyKey, uomKey, linesKey) {
@@ -237,12 +237,13 @@ export default function OperationsMonitor() {
   const [from, setFrom] = useState(todayISO())
   const [to, setTo] = useState(todayISO())
   const [customer, setCustomer] = useState('')
+  const [accountHolder, setAccountHolder] = useState('')
   const [manualOpen, setManualOpen] = useState(false)
 
   const live = db.operationsActivities.filter((a) => a.status !== 'complete')
   const history = db.operationsActivities
     .filter((a) => a.status === 'complete')
-    .filter((a) => (!from || a.date >= from) && (!to || a.date <= to) && (!customer || a.customerName === customer))
+    .filter((a) => (!from || a.date >= from) && (!to || a.date <= to) && (!customer || a.customerName === customer) && (!accountHolder || accountHolderOf(db, a.customerName) === accountHolder))
     .sort((a, b) => (b.endTime || '').localeCompare(a.endTime || ''))
 
   function exportHistory() {
@@ -303,6 +304,7 @@ export default function OperationsMonitor() {
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
             <Select value={customer} onChange={setCustomer} options={db.customers.map((c) => c.name)} placeholder="All customers" style={{ width: 180 }} />
+            <Select value={accountHolder} onChange={setAccountHolder} options={accountHolderNames(db)} placeholder="All account holders" style={{ width: 180 }} />
             {canManual && <button className="btn btn-primary btn-sm" onClick={() => setManualOpen(true)}>+ Manual Entry</button>}
             <button className="btn btn-outline btn-sm" onClick={exportHistory} disabled={!history.length}>⬇ Excel</button>
           </div>

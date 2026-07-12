@@ -17,6 +17,7 @@ export const WRITE_POLICY = {
   // Reference / master data, billing and settings — Admin & Developer only.
   users: ADMIN,
   customers: ADMIN,
+  accountHolders: ADMIN,
   activitiesMaster: ADMIN,
   uoms: ADMIN,
   currencies: ADMIN,

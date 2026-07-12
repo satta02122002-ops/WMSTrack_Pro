@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { round2, num, daysToMonthEnd, storageTypeNames } from '../src/utils.js'
+import { round2, num, daysToMonthEnd, storageTypeNames, accountHolderNames, accountHolderOf } from '../src/utils.js'
 import { monthsInRange } from '../src/billing.js'
 
 test('round2 rounds to two decimals', () => {
@@ -35,6 +35,18 @@ test('storageTypeNames unions managed list, rates, then defaults', () => {
     ['Normal Storage'],
   )
   assert.deepEqual(storageTypeNames({}), ['Normal Storage', 'Cold Storage', 'Bonded Storage'])
+})
+
+test('account holder helpers resolve names and per-customer holder', () => {
+  const db = {
+    accountHolders: [{ id: 'a1', name: 'Jane' }, { id: 'a2', name: 'Omar' }],
+    customers: [{ id: 'c1', name: 'Acme', accountHolder: 'Jane' }, { id: 'c2', name: 'Gulf' }],
+  }
+  assert.deepEqual(accountHolderNames(db), ['Jane', 'Omar'])
+  assert.equal(accountHolderOf(db, 'Acme'), 'Jane')
+  assert.equal(accountHolderOf(db, 'Gulf'), '') // no holder assigned
+  assert.equal(accountHolderOf(db, 'Unknown'), '')
+  assert.deepEqual(accountHolderNames({}), []) // legacy db without the key
 })
 
 test('monthsInRange enumerates months inclusively', () => {

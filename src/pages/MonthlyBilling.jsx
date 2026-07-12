@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, EmptyState, StatusBadge } from '../components/ui.jsx'
-import { fmtDate, fmtNum, num, round2, todayISO, monthName } from '../utils.js'
+import { fmtDate, fmtNum, num, round2, todayISO, monthName, accountHolderOf, accountHolderNames } from '../utils.js'
 import { computeBillingLinesRange } from '../billing.js'
 import { exportXlsx } from '../excel.js'
 
@@ -12,6 +12,7 @@ export default function MonthlyBilling() {
   const [from, setFrom] = useState(monthStart)
   const [to, setTo] = useState(todayISO())
   const [customer, setCustomer] = useState('')
+  const [accountHolder, setAccountHolder] = useState('')
   const [reportType, setReportType] = useState('')
   const [billStatus, setBillStatus] = useState('')
   const [billedMonth, setBilledMonth] = useState('')
@@ -33,6 +34,7 @@ export default function MonthlyBilling() {
     if (!applied) return []
     return allLines.filter((l) => {
       if (applied.customer && l.customerName !== applied.customer) return false
+      if (applied.accountHolder && accountHolderOf(db, l.customerName) !== applied.accountHolder) return false
       if (applied.reportType && l.reportType !== applied.reportType) return false
       const billed = billedMap.get(l.id)
       if (applied.billStatus === 'notbilled' && billed) return false
@@ -46,7 +48,7 @@ export default function MonthlyBilling() {
       }
       return true
     })
-  }, [allLines, applied, billedMap])
+  }, [allLines, applied, billedMap, db])
 
   const billedYearOptions = useMemo(() => {
     const set = new Set()
@@ -81,7 +83,7 @@ export default function MonthlyBilling() {
   function applyFilters() {
     if (!from || !to) return toast('Select both From and To dates', 'error')
     if (from > to) return toast('From date must be on or before To date', 'error')
-    setApplied({ from, to, customer, reportType, billStatus, billedMonth, billedYear })
+    setApplied({ from, to, customer, accountHolder, reportType, billStatus, billedMonth, billedYear })
     setSelected(new Set())
   }
 
@@ -165,6 +167,9 @@ export default function MonthlyBilling() {
           </Field>
           <Field label="Customer">
             <Select value={customer} onChange={setCustomer} options={db.customers.map((c) => c.name)} placeholder="All customers" />
+          </Field>
+          <Field label="Account Holder">
+            <Select value={accountHolder} onChange={setAccountHolder} options={accountHolderNames(db)} placeholder="All account holders" />
           </Field>
           <Field label="Report Type">
             <Select value={reportType} onChange={setReportType} options={['Activities', 'Storage', 'Handling', 'VAS']} placeholder="All" />

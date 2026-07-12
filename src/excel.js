@@ -49,9 +49,9 @@ export function readSpreadsheetFile(file) {
 export const IMPORT_TEMPLATES = {
   customers: {
     label: 'Customers',
-    headers: ['name', 'currency', 'references'],
-    sample: [{ name: 'Example Customer Ltd', currency: 'USD', references: 'REF-001;REF-002' }],
-    note: 'references: separate multiple references with ;',
+    headers: ['name', 'currency', 'accountHolder', 'references'],
+    sample: [{ name: 'Example Customer Ltd', currency: 'USD', accountHolder: 'Jane Manager', references: 'REF-001;REF-002' }],
+    note: 'references: separate multiple references with ; · accountHolder: optional, should match a name in Parameter → Account Holders',
   },
   activities: {
     label: 'Activities',
