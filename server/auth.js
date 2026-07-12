@@ -10,6 +10,19 @@ if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   console.warn('WARNING: JWT_SECRET environment variable not set. Using insecure default.')
 }
 
+// Baseline password policy: at least 8 characters, with a letter and a number.
+// Applied when a password is set/changed; existing weaker passwords still log
+// in until they are next changed.
+export function validatePassword(password) {
+  if (typeof password !== 'string' || password.length < 8) {
+    return { ok: false, error: 'Password must be at least 8 characters long' }
+  }
+  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+    return { ok: false, error: 'Password must include at least one letter and one number' }
+  }
+  return { ok: true }
+}
+
 export async function hashPassword(password) {
   return bcrypt.hash(password, SALT_ROUNDS)
 }

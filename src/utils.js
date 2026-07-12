@@ -76,6 +76,14 @@ export function monthName(month1based) {
   return new Date(2000, month1based - 1, 1).toLocaleString(undefined, { month: 'long' })
 }
 
+// Client-side mirror of the server password policy (server is the enforcer).
+// Returns an error string, or null when the password is acceptable.
+export function passwordPolicyError(password) {
+  if (typeof password !== 'string' || password.length < 8) return 'Password must be at least 8 characters'
+  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) return 'Password must include a letter and a number'
+  return null
+}
+
 export const DEFAULT_STORAGE_TYPES = ['Normal Storage', 'Cold Storage', 'Bonded Storage']
 
 /**

@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { getState, setState, applyChangesTx } from './db.js'
-import { hashPassword, verifyPassword, isLegacyHash, signToken, authMiddleware } from './auth.js'
+import { hashPassword, verifyPassword, isLegacyHash, signToken, authMiddleware, validatePassword } from './auth.js'
 import { seedDb } from './seed.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -15,11 +15,32 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1)
 }
 
+// Content-Security-Policy for the self-hosted SPA. 'unsafe-inline' is allowed
+// only for styles (the app uses inline <style>/style props); scripts are
+// same-origin only. connect-src also permits https: so the optional external
+// billing-API submit works.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self' data:",
+  "connect-src 'self' https:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+].join('; ')
+
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'DENY')
-  res.setHeader('X-XSS-Protection', '1; mode=block')
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('Content-Security-Policy', CSP)
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin')
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()')
+  res.setHeader('X-XSS-Protection', '0') // deprecated; disabled per modern guidance
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
   }
@@ -31,10 +52,37 @@ app.use(cors({
 }))
 app.use(express.json({ limit: '10mb' }))
 
+// General API backstop against abuse. The high-frequency authenticated poll
+// (GET /api/db) and save (POST /api/db/sync) are exempt so normal use is never
+// throttled; static assets are not counted either.
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please slow down and try again shortly.' },
+  skip: (req) => {
+    if (!req.path.startsWith('/api')) return true
+    if (req.method === 'GET' && req.path === '/api/db') return true
+    if (req.method === 'POST' && req.path === '/api/db/sync') return true
+    return false
+  },
+})
+app.use(generalLimiter)
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+// Tighter limit on password-mutation endpoints (defence in depth).
+const passwordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: { error: 'Too many password requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 })
@@ -110,12 +158,14 @@ app.post('/api/login', loginLimiter, async (req, res) => {
 
 // ---- Protected endpoints --------------------------------------------------
 
-app.post('/api/change-password', authMiddleware, async (req, res) => {
+app.post('/api/change-password', authMiddleware, passwordLimiter, async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body
-    if (!oldPassword || !newPassword || newPassword.length < 4) {
-      return res.status(400).json({ error: 'Old password and new password (min 4 chars) are required' })
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ error: 'Old and new passwords are required' })
     }
+    const policy = validatePassword(newPassword)
+    if (!policy.ok) return res.status(400).json({ error: policy.error })
 
     const state = await getState()
     const user = state?.data?.users?.find((u) => u.id === req.user.id)
@@ -136,16 +186,18 @@ app.post('/api/change-password', authMiddleware, async (req, res) => {
   }
 })
 
-app.post('/api/set-user-password', authMiddleware, async (req, res) => {
+app.post('/api/set-user-password', authMiddleware, passwordLimiter, async (req, res) => {
   try {
     if (!['Admin', 'Developer'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Only Admin or Developer can set user passwords' })
     }
 
     const { targetUserId, password } = req.body
-    if (!targetUserId || !password || password.length < 4) {
-      return res.status(400).json({ error: 'Target user ID and password (min 4 chars) are required' })
+    if (!targetUserId || !password) {
+      return res.status(400).json({ error: 'Target user ID and password are required' })
     }
+    const policy = validatePassword(password)
+    if (!policy.ok) return res.status(400).json({ error: policy.error })
 
     const state = await getState()
     const user = state?.data?.users?.find(

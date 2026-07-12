@@ -32,7 +32,7 @@ A first automated **test suite (17 tests)** and a **CI pipeline** were added;
 | Frontend | 82 / 100 |
 | Backend | 74 / 100 |
 | Database | 45 / 100 |
-| Security | 72 / 100 |
+| Security | 80 / 100 |
 | Performance | 66 / 100 |
 | Maintainability | 80 / 100 |
 | UI / UX | 84 / 100 |
@@ -113,16 +113,23 @@ needs a larger decision).
 - Removed unused store actions (`startActivity`, `addActivity`), the defunct
   `prefill`/`setPrefill` hand-off, `storageDaysDefault`, and unused imports.
 
-**M5 — Weak password policy** · _Pending_
-- Minimum 4 characters, no complexity/lockout beyond login rate-limit.
-  Recommend ≥ 8 chars + basic complexity.
+**M5 — Weak password policy** · _Fixed_
+- Now enforced server-side (`validatePassword`): ≥ 8 chars with at least one
+  letter and one number, applied on change-password and set-user-password. The
+  client mirrors it with live hints. Existing weaker passwords still log in
+  until next changed (no lockout).
 
-**M6 — Rate limiting only on login** · _Pending_
-- Recommend a general limiter on the API and a stricter one on write endpoints.
+**M6 — Rate limiting only on login** · _Fixed_
+- Added a general API limiter (600 / 15 min per IP, exempting the high-frequency
+  authenticated poll and sync so normal use is never throttled) plus a tighter
+  60 / 15 min limiter on the password endpoints, alongside the existing login
+  limiter.
 
-**M7 — Limited security headers (no CSP)** · _Pending_
-- Baseline headers are set manually; recommend `helmet` with a Content-Security
-  -Policy.
+**M7 — Limited security headers (no CSP)** · _Fixed_
+- Added a Content-Security-Policy (same-origin scripts; inline styles allowed;
+  `connect-src 'self' https:` so the optional billing-API submit works), plus
+  Cross-Origin-Opener/Resource-Policy and Permissions-Policy. Verified the
+  production build has no inline scripts that the policy would block.
 
 ### Low
 

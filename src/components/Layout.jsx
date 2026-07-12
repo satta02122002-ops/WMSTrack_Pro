@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useStore, PAGES, pagesForUser } from '../store.jsx'
 import { Modal, Field } from './ui.jsx'
 import Logo from './Logo.jsx'
-import { fmtTime } from '../utils.js'
+import { fmtTime, passwordPolicyError } from '../utils.js'
 
 function ChangePasswordModal({ onClose }) {
   const { changePassword, toast } = useStore()
@@ -12,10 +12,12 @@ function ChangePasswordModal({ onClose }) {
   const [show, setShow] = useState(false)
   const [error, setError] = useState('')
 
-  const valid = oldPw && newPw.length >= 4 && newPw === confirmPw
+  const valid = oldPw && !passwordPolicyError(newPw) && newPw === confirmPw
 
   async function submit() {
     setError('')
+    const policyError = passwordPolicyError(newPw)
+    if (policyError) return setError(policyError)
     if (newPw !== confirmPw) return setError('New passwords do not match')
     const res = await changePassword(oldPw, newPw)
     if (!res.ok) return setError(res.error)
@@ -38,7 +40,7 @@ function ChangePasswordModal({ onClose }) {
       <Field label="Current password" required>
         <input type={show ? 'text' : 'password'} value={oldPw} onChange={(e) => setOldPw(e.target.value)} autoFocus />
       </Field>
-      <Field label="New password" required hint="Minimum 4 characters">
+      <Field label="New password" required hint="At least 8 characters, including a letter and a number">
         <input type={show ? 'text' : 'password'} value={newPw} onChange={(e) => setNewPw(e.target.value)} />
       </Field>
       <Field label="Confirm new password" required>

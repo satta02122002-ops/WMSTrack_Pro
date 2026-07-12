@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useStore, PAGES, ROLES, ROLE_PAGES } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
+import { passwordPolicyError } from '../utils.js'
 
 function UserModal({ record, onClose }) {
   const { db, upsert, toast, logAction, setUserPassword } = useStore()
@@ -15,7 +16,10 @@ function UserModal({ record, onClose }) {
   const duplicate = db.users.some(
     (u) => u.userId.toLowerCase() === r.userId.trim().toLowerCase() && u.id !== record?.id,
   )
-  const valid = r.name.trim() && r.userId.trim() && !duplicate && (!isNew || password.length >= 4)
+  // A password is required for new users, optional (reset) when editing; when
+  // present it must satisfy the policy.
+  const passwordOk = isNew ? !passwordPolicyError(password) : (!password || !passwordPolicyError(password))
+  const valid = r.name.trim() && r.userId.trim() && !duplicate && passwordOk
 
   function togglePage(k) {
     setPages((s) => {
@@ -65,7 +69,7 @@ function UserModal({ record, onClose }) {
         <Field label="User ID" required hint={duplicate ? '⚠ This User ID is already taken' : 'Login is case-insensitive'}>
           <input type="text" value={r.userId} onChange={(e) => setR((s) => ({ ...s, userId: e.target.value }))} />
         </Field>
-        <Field label={isNew ? 'Password' : 'Reset password'} required={isNew} hint={isNew ? 'Minimum 4 characters' : 'Leave empty to keep current password'}>
+        <Field label={isNew ? 'Password' : 'Reset password'} required={isNew} hint={password || isNew ? (passwordPolicyError(password) || '✓ Meets policy') : 'Leave empty to keep current password'}>
           <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={isNew ? '' : '(unchanged)'} />
         </Field>
         <Field label="Role" required>
