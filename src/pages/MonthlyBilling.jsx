@@ -16,7 +16,7 @@ export default function MonthlyBilling() {
   const [billStatus, setBillStatus] = useState('')
   const [billedMonth, setBilledMonth] = useState('')
   const [billedYear, setBilledYear] = useState('')
-  const [generated, setGenerated] = useState(false)
+  const [applied, setApplied] = useState(null) // snapshot of the filters currently shown
   const [selected, setSelected] = useState(() => new Set())
   const [billModal, setBillModal] = useState(false)
   const [unbillModal, setUnbillModal] = useState(false)
@@ -24,30 +24,29 @@ export default function MonthlyBilling() {
   const [apiUrl, setApiUrl] = useState(db.settings?.billingApiUrl || '')
   const [submitting, setSubmitting] = useState(false)
 
-  const rangeKey = `${from}..${to}`
-  const rangeLabel = `${fmtDate(from)} – ${fmtDate(to)}`
+  const rangeKey = applied ? `${applied.from}..${applied.to}` : `${from}..${to}`
+  const rangeLabel = applied ? `${fmtDate(applied.from)} – ${fmtDate(applied.to)}` : `${fmtDate(from)} – ${fmtDate(to)}`
 
-  const allLines = useMemo(() => (generated ? computeBillingLinesRange(db, from, to) : []), [db, from, to, generated])
+  const allLines = useMemo(() => (applied ? computeBillingLinesRange(db, applied.from, applied.to) : []), [db, applied])
 
-  const lines = useMemo(
-    () =>
-      allLines.filter((l) => {
-        if (customer && l.customerName !== customer) return false
-        if (reportType && l.reportType !== reportType) return false
-        const billed = billedMap.get(l.id)
-        if (billStatus === 'notbilled' && billed) return false
-        if (billStatus === 'billed' && !billed) return false
-        // Filter by the month/year the line was billed in (its billing period)
-        if (billedMonth || billedYear) {
-          if (!billed?.billedDate) return false
-          const bd = String(billed.billedDate)
-          if (billedYear && bd.slice(0, 4) !== String(billedYear)) return false
-          if (billedMonth && Number(bd.slice(5, 7)) !== Number(billedMonth)) return false
-        }
-        return true
-      }),
-    [allLines, customer, reportType, billStatus, billedMonth, billedYear, billedMap],
-  )
+  const lines = useMemo(() => {
+    if (!applied) return []
+    return allLines.filter((l) => {
+      if (applied.customer && l.customerName !== applied.customer) return false
+      if (applied.reportType && l.reportType !== applied.reportType) return false
+      const billed = billedMap.get(l.id)
+      if (applied.billStatus === 'notbilled' && billed) return false
+      if (applied.billStatus === 'billed' && !billed) return false
+      // Filter by the month/year the line was billed in (its billing period)
+      if (applied.billedMonth || applied.billedYear) {
+        if (!billed?.billedDate) return false
+        const bd = String(billed.billedDate)
+        if (applied.billedYear && bd.slice(0, 4) !== String(applied.billedYear)) return false
+        if (applied.billedMonth && Number(bd.slice(5, 7)) !== Number(applied.billedMonth)) return false
+      }
+      return true
+    })
+  }, [allLines, applied, billedMap])
 
   const billedYearOptions = useMemo(() => {
     const set = new Set()
@@ -79,10 +78,10 @@ export default function MonthlyBilling() {
     })
   }
 
-  function generate() {
+  function applyFilters() {
     if (!from || !to) return toast('Select both From and To dates', 'error')
     if (from > to) return toast('From date must be on or before To date', 'error')
-    setGenerated(true)
+    setApplied({ from, to, customer, reportType, billStatus, billedMonth, billedYear })
     setSelected(new Set())
   }
 
@@ -100,7 +99,7 @@ export default function MonthlyBilling() {
 
   function exportExcel() {
     exportXlsx(
-      `billing_${from}_to_${to}.xlsx`,
+      `billing_${applied?.from || from}_to_${applied?.to || to}.xlsx`,
       lines.map((l) => {
         const billed = billedMap.get(l.id)
         return {
@@ -128,7 +127,8 @@ export default function MonthlyBilling() {
     setSubmitting(true)
     try {
       const payload = {
-        from, to, generatedAt: new Date().toISOString(), generatedBy: session?.name,
+        from: applied?.from || from, to: applied?.to || to,
+        generatedAt: new Date().toISOString(), generatedBy: session?.name,
         lines: lines.map((l) => ({ ...l, billed: !!billedMap.get(l.id) })),
       }
       const res = await fetch(apiUrl, {
@@ -158,10 +158,10 @@ export default function MonthlyBilling() {
       <div className="card">
         <div className="form-grid">
           <Field label="From Date">
-            <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setGenerated(false) }} max={to || undefined} />
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} max={to || undefined} />
           </Field>
           <Field label="To Date">
-            <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setGenerated(false) }} min={from || undefined} />
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} min={from || undefined} />
           </Field>
           <Field label="Customer">
             <Select value={customer} onChange={setCustomer} options={db.customers.map((c) => c.name)} placeholder="All customers" />
@@ -180,11 +180,11 @@ export default function MonthlyBilling() {
           </Field>
         </div>
         <div className="row-end">
-          <button className="btn btn-primary" onClick={generate}>⚡ Generate Billing</button>
+          <button className="btn btn-primary" onClick={applyFilters}>⚡ Apply</button>
         </div>
       </div>
 
-      {generated && (
+      {applied && (
         <div className="card">
           <div className="spread" style={{ marginBottom: 12 }}>
             <div className="row">
