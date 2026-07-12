@@ -5,22 +5,33 @@ import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyL
 import { activityDuration, fmtDuration, fmtDate, fmtTime, todayISO, nowISO, uid, num, qtyDisplay, storageTypeNames } from '../utils.js'
 import { exportXlsx } from '../excel.js'
 
-function ManualActivityModal({ onClose }) {
-  const { db, update, toast, session } = useStore()
-  const [customerName, setCustomerName] = useState('')
-  const [customerRef, setCustomerRef] = useState('')
-  const [type, setType] = useState('')
-  const [date, setDate] = useState(todayISO())
-  const [durationMin, setDurationMin] = useState('')
-  const [qtyLines, setQtyLines] = useState([{ qty: '', uom: '' }])
+function linesFrom(record, qtyKey, uomKey, linesKey) {
+  if (Array.isArray(record?.[linesKey]) && record[linesKey].length) {
+    return record[linesKey].map((l) => ({ qty: String(l.qty), uom: l.uom }))
+  }
+  if (record?.[qtyKey] != null && record[qtyKey] !== '') {
+    return [{ qty: String(record[qtyKey]), uom: record[uomKey] || '' }]
+  }
+  return [{ qty: '', uom: '' }]
+}
+
+function ManualActivityModal({ activity, onClose }) {
+  const { db, update, toast, session, updateOperationsActivity } = useStore()
+  const editing = !!activity
+  const [customerName, setCustomerName] = useState(activity?.customerName || '')
+  const [customerRef, setCustomerRef] = useState(activity?.customerRef || '')
+  const [type, setType] = useState(activity?.type || '')
+  const [date, setDate] = useState(activity?.date || todayISO())
+  const [durationMin, setDurationMin] = useState(activity ? String(Math.round((activity.durationSeconds || 0) / 60)) : '')
+  const [qtyLines, setQtyLines] = useState(() => linesFrom(activity, 'qty', 'uom', 'qtyLines'))
 
   // Storage fields
-  const [cbm, setCbm] = useState('')
-  const [storageTypeUsed, setStorageTypeUsed] = useState('')
-  const [handlingMode, setHandlingMode] = useState('')
-  const [vehicleType, setVehicleType] = useState('')
-  const [truckCount, setTruckCount] = useState('1')
-  const [pkgLines, setPkgLines] = useState([{ qty: '', uom: '' }])
+  const [cbm, setCbm] = useState(activity?.cbm != null ? String(activity.cbm) : '')
+  const [storageTypeUsed, setStorageTypeUsed] = useState(activity?.storageTypeUsed || '')
+  const [handlingMode, setHandlingMode] = useState(activity?.handlingMode || '')
+  const [vehicleType, setVehicleType] = useState(activity?.vehicleType || '')
+  const [truckCount, setTruckCount] = useState(activity?.truckCount != null ? String(activity.truckCount) : '1')
+  const [pkgLines, setPkgLines] = useState(() => linesFrom(activity, 'packageQty', 'packageUom', 'packageLines'))
 
   const master = db.activitiesMaster.find((a) => a.name === type)
   const isStorage = master?.storageType === 'inbound' || master?.storageType === 'outbound'
@@ -61,6 +72,12 @@ function ManualActivityModal({ onClose }) {
         cbm: null, storageTypeUsed: null, handlingMode: null,
         vehicleType: null, truckCount: null, packageLines: null, packageQty: null, packageUom: null,
       }
+    }
+
+    if (editing) {
+      updateOperationsActivity(activity.id, { ...actPayload, date, durationSeconds, accumulatedSeconds: durationSeconds })
+      onClose()
+      return
     }
 
     const actId = uid('op')
@@ -115,22 +132,22 @@ function ManualActivityModal({ onClose }) {
 
   return (
     <Modal
-      title="Manual Activity Entry"
+      title={editing ? `Edit Activity — ${activity.type}` : 'Manual Activity Entry'}
       onClose={onClose}
       wide
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={!valid} onClick={save}>Save Activity</button>
+          <button className="btn btn-primary" disabled={!valid} onClick={save}>{editing ? 'Save Changes' : 'Save Activity'}</button>
         </>
       }
     >
       <div className="form-grid">
         <Field label="Customer Name" required>
-          <Select value={customerName} onChange={(v) => { setCustomerName(v); setCustomerRef('') }} options={db.customers.map((c) => c.name)} placeholder="Select…" />
+          <Select value={customerName} onChange={(v) => { setCustomerName(v); setCustomerRef('') }} options={db.customers.map((c) => c.name)} placeholder="Select…" disabled={editing} />
         </Field>
         <Field label="Customer Reference No" required>
-          <input type="text" list="manual-ref-opts" value={customerRef} onChange={(e) => setCustomerRef(e.target.value)} placeholder="e.g. PO-1001" disabled={!customerName} />
+          <input type="text" list="manual-ref-opts" value={customerRef} onChange={(e) => setCustomerRef(e.target.value)} placeholder="e.g. PO-1001" disabled={!customerName || editing} />
           <datalist id="manual-ref-opts">
             {(customer?.references || []).map((r) => <option key={r} value={r} />)}
           </datalist>
@@ -141,6 +158,7 @@ function ManualActivityModal({ onClose }) {
             onChange={(v) => { setType(v); setStorageTypeUsed(''); setHandlingMode('') }}
             options={db.activitiesMaster.map((a) => ({ value: a.name, label: a.name + (a.storageType ? ` (${a.storageType})` : '') }))}
             placeholder="Select…"
+            disabled={editing}
           />
         </Field>
         <Field label="Date" required>
@@ -204,8 +222,10 @@ function ManualActivityModal({ onClose }) {
 }
 
 export default function OperationsMonitor() {
-  const { db, currentUser } = useStore()
+  const { db, currentUser, deleteOperationsActivity } = useStore()
   const canManual = ['Admin', 'Supervisor', 'Developer'].includes(currentUser.role)
+  const canManageOps = currentUser.role === 'Developer'
+  const [editActivity, setEditActivity] = useState(null)
   const hasLive = db.operationsActivities.some((a) => a.status !== 'complete')
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -297,6 +317,7 @@ export default function OperationsMonitor() {
                   <th>Date</th><th>Activity</th><th>Customer</th><th>Reference</th><th>Owner</th>
                   <th className="num">Duration</th><th className="num">Qty</th><th>UOM</th>
                   <th className="num">CBM</th><th>Handling</th><th>Outcome</th>
+                  {canManageOps && <th></th>}
                 </tr>
               </thead>
               <tbody>
@@ -313,6 +334,17 @@ export default function OperationsMonitor() {
                     <td className="num">{a.cbm ?? '—'}</td>
                     <td>{a.handlingMode ? `${a.handlingMode}${a.vehicleType ? ' ' + a.vehicleType : ''}` : '—'}</td>
                     <td><StatusBadge status={a.outcome} /></td>
+                    {canManageOps && (
+                      <td>
+                        <div className="row" style={{ gap: 5, flexWrap: 'nowrap' }}>
+                          <button className="btn btn-sm btn-ghost" onClick={() => setEditActivity(a)}>Edit</button>
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => window.confirm('Delete this activity? Its storage movement and billing lines will be removed. This cannot be undone.') && deleteOperationsActivity(a.id)}
+                          >✕</button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -322,6 +354,7 @@ export default function OperationsMonitor() {
       </div>
 
       {manualOpen && canManual && <ManualActivityModal onClose={() => setManualOpen(false)} />}
+      {editActivity && canManageOps && <ManualActivityModal activity={editActivity} onClose={() => setEditActivity(null)} />}
     </div>
   )
 }

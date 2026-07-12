@@ -636,6 +636,68 @@ export function StoreProvider({ children }) {
     [update, logEntry, session, toast],
   )
 
+  // Edit a completed activity's billable details, keeping its auto-created
+  // storage movement in sync. Identity (customer/ref/type) is not changed here.
+  const updateOperationsActivity = useCallback(
+    (id, payload) => {
+      update((d) => {
+        const act = d.operationsActivities.find((a) => a.id === id)
+        if (!act) return d
+        const updated = { ...act, ...payload }
+        let storageMovements = d.storageMovements
+        const isStorage = act.storageType === 'inbound' || act.storageType === 'outbound'
+        if (isStorage) {
+          const movPatch = {
+            customer: act.customerName, reference: act.customerRef, date: payload.date ?? act.date,
+            type: act.storageType === 'inbound' ? 'Inbound' : 'Outbound',
+            cbm: num(payload.cbm), storage: payload.storageTypeUsed,
+            handlingMode: payload.handlingMode || null,
+            containerSize: payload.vehicleType || null,
+            truckCount: payload.truckCount != null && payload.truckCount !== '' ? num(payload.truckCount) : null,
+            packageQty: payload.packageQty ?? null, packageUom: payload.packageUom ?? null,
+            packageLines: payload.packageLines || null,
+          }
+          const idx = storageMovements.findIndex((m) => m.sourceActivityId === id)
+          storageMovements = idx >= 0
+            ? storageMovements.map((m, i) => (i === idx ? { ...m, ...movPatch } : m))
+            : [{ id: uid('mov'), ...movPatch, storageDays: null, sourceActivityId: id }, ...storageMovements]
+        }
+        return logEntry(session?.name || 'system', 'Edit Activity', 'Operations', `Edited completed ${act.type} for ${act.customerName} (${act.customerRef})`)({
+          ...d,
+          operationsActivities: d.operationsActivities.map((a) => (a.id === id ? updated : a)),
+          storageMovements,
+        })
+      })
+      toast('Activity updated')
+    },
+    [update, logEntry, session, toast],
+  )
+
+  // Delete a completed activity, its auto-created storage movement, and any
+  // billed-record references to the billing lines they produced.
+  const deleteOperationsActivity = useCallback(
+    (id) => {
+      update((d) => {
+        const act = d.operationsActivities.find((a) => a.id === id)
+        if (!act) return d
+        const linkedMovIds = d.storageMovements.filter((m) => m.sourceActivityId === id).map((m) => m.id)
+        const prefixes = [`act:${id}`, ...linkedMovIds.flatMap((mid) => [`sto:${mid}`, `han:${mid}`])]
+        const isOrphan = (lid) => prefixes.some((p) => lid === p || lid.startsWith(`${p}:`))
+        const billedRecords = d.billedRecords
+          .map((r) => ({ ...r, lineIds: r.lineIds.filter((lid) => !isOrphan(lid)) }))
+          .filter((r) => r.lineIds.length)
+        return logEntry(session?.name || 'system', 'Delete Activity', 'Operations', `Deleted completed ${act.type} for ${act.customerName} (${act.customerRef})`)({
+          ...d,
+          operationsActivities: d.operationsActivities.filter((a) => a.id !== id),
+          storageMovements: d.storageMovements.filter((m) => m.sourceActivityId !== id),
+          billedRecords,
+        })
+      })
+      toast('Activity deleted', 'info')
+    },
+    [update, logEntry, session, toast],
+  )
+
   // ---- Generic collection CRUD ---------------------------------------------
 
   const upsert = useCallback(
@@ -791,6 +853,7 @@ export function StoreProvider({ children }) {
       myActiveActivity: null, addActivities: () => {}, startAssignedActivity: () => {},
       pauseActivity: () => {}, resumeActivity: () => {},
       joinActivity: () => {}, leaveActivity: () => {}, endActivity: () => {},
+      updateOperationsActivity: () => {}, deleteOperationsActivity: () => {},
       recordBilling: () => {}, unbillRecords: () => {}, billedMap: new Map(),
       logAction: () => {}, toast, toasts,
       pagesForUser, resetDb: () => {}, clearDemoData: () => {},
@@ -805,6 +868,7 @@ export function StoreProvider({ children }) {
     session, currentUser, login, logout, changePassword,
     isCheckedIn, needsCheckIn, attendanceRequired, todayAttendance, checkIn, checkOut,
     myActiveActivity, addActivities, startAssignedActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, endActivity,
+    updateOperationsActivity, deleteOperationsActivity,
     recordBilling, unbillRecords, billedMap,
     logAction, toast, toasts,
     pagesForUser, resetDb, clearDemoData,
