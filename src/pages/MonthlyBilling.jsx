@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, EmptyState, StatusBadge } from '../components/ui.jsx'
-import { fmtDate, fmtNum, num, round2, todayISO } from '../utils.js'
+import { fmtDate, fmtNum, num, round2, todayISO, monthName } from '../utils.js'
 import { computeBillingLinesRange } from '../billing.js'
 import { exportXlsx } from '../excel.js'
 
@@ -14,6 +14,8 @@ export default function MonthlyBilling() {
   const [customer, setCustomer] = useState('')
   const [reportType, setReportType] = useState('')
   const [billStatus, setBillStatus] = useState('')
+  const [billedMonth, setBilledMonth] = useState('')
+  const [billedYear, setBilledYear] = useState('')
   const [generated, setGenerated] = useState(false)
   const [selected, setSelected] = useState(() => new Set())
   const [billModal, setBillModal] = useState(false)
@@ -35,10 +37,24 @@ export default function MonthlyBilling() {
         const billed = billedMap.get(l.id)
         if (billStatus === 'notbilled' && billed) return false
         if (billStatus === 'billed' && !billed) return false
+        // Filter by the month/year the line was billed in (its billing period)
+        if (billedMonth || billedYear) {
+          if (!billed?.billedDate) return false
+          const bd = String(billed.billedDate)
+          if (billedYear && bd.slice(0, 4) !== String(billedYear)) return false
+          if (billedMonth && Number(bd.slice(5, 7)) !== Number(billedMonth)) return false
+        }
         return true
       }),
-    [allLines, customer, reportType, billStatus, billedMap],
+    [allLines, customer, reportType, billStatus, billedMonth, billedYear, billedMap],
   )
+
+  const billedYearOptions = useMemo(() => {
+    const set = new Set()
+    for (const r of db.billedRecords) if (r.billedDate) set.add(String(r.billedDate).slice(0, 4))
+    set.add(String(now.getFullYear()))
+    return [...set].sort((a, b) => b.localeCompare(a))
+  }, [db.billedRecords])
 
   const totalsByCurrency = useMemo(() => {
     const m = new Map()
@@ -155,6 +171,12 @@ export default function MonthlyBilling() {
           </Field>
           <Field label="Billing Status">
             <Select value={billStatus} onChange={setBillStatus} options={[{ value: 'notbilled', label: 'Not yet billed' }, { value: 'billed', label: 'Already billed' }]} placeholder="All" />
+          </Field>
+          <Field label="Billing Month" hint="Filter by the month a line was billed">
+            <Select value={billedMonth} onChange={setBilledMonth} options={Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: monthName(i + 1) }))} placeholder="All" />
+          </Field>
+          <Field label="Billing Year" hint="Filter by the year a line was billed">
+            <Select value={billedYear} onChange={setBilledYear} options={billedYearOptions} placeholder="All" />
           </Field>
         </div>
         <div className="row-end">
