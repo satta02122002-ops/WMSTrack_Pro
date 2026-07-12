@@ -1,17 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
 import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
-import { activityDuration, fmtDuration, fmtTime, num, storageTypeNames } from '../utils.js'
-
-function useTick(active, intervalMs = 1000) {
-  const [, setN] = useState(0)
-  useEffect(() => {
-    if (!active) return
-    const t = setInterval(() => setN((n) => n + 1), intervalMs)
-    return () => clearInterval(t)
-  }, [active, intervalMs])
-}
+import { fmtTime, num, storageTypeNames } from '../utils.js'
 
 export function EndActivityModal({ activity, onClose }) {
   const { db, endActivity } = useStore()
@@ -79,7 +70,7 @@ export function EndActivityModal({ activity, onClose }) {
       }
     >
       <div className="banner banner-brand" style={{ marginBottom: 14 }}>
-        <b>{activity.customerName}</b>&nbsp;·&nbsp;{activity.customerRef}&nbsp;·&nbsp;Duration {fmtDuration(activityDuration(activity))}
+        <b>{activity.customerName}</b>&nbsp;·&nbsp;{activity.customerRef}&nbsp;·&nbsp;Started {fmtTime(activity.startTime)}
       </div>
 
       {isStorage ? (
@@ -148,9 +139,6 @@ export default function OperationsExecution() {
     db, currentUser, needsCheckIn, myActiveActivity,
     addActivities, startAssignedActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, remove,
   } = useStore()
-  const hasLive = !!myActiveActivity || db.operationsActivities.some((a) => a.status !== 'complete')
-  useTick(hasLive)
-
   const canAssign = ASSIGN_ROLES.includes(currentUser.role)
   const canExecute = EXECUTE_ROLES.includes(currentUser.role)
 
@@ -231,7 +219,6 @@ export default function OperationsExecution() {
               </p>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div className="live-timer">{fmtDuration(activityDuration(myActiveActivity))}</div>
               <div className="row-end mt">
                 {isOwner ? (
                   <>
@@ -356,7 +343,7 @@ export default function OperationsExecution() {
                 <thead>
                   <tr>
                     <th>Activity</th><th>Customer</th><th>Reference</th><th>Assigned To</th>
-                    <th>Status</th><th>Being Done By</th><th className="num">Duration</th><th></th>
+                    <th>Status</th><th>Being Done By</th><th>Started</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -368,7 +355,7 @@ export default function OperationsExecution() {
                       <td>{a.assignedToName || <span className="badge badge-gray">ANY USER</span>}</td>
                       <td><StatusBadge status={a.status} /></td>
                       <td>{a.ownerName || '—'}</td>
-                      <td className="num">{a.status === 'assigned' ? '—' : fmtDuration(activityDuration(a))}</td>
+                      <td>{fmtTime(a.startTime)}</td>
                       <td>
                         {a.status === 'assigned' && (
                           <button className="btn btn-sm btn-danger" onClick={() => window.confirm('Remove this assigned activity?') && remove('operationsActivities', a.id, { entityType: 'Operations', label: 'assigned activity' })}>✕</button>
@@ -395,7 +382,7 @@ export default function OperationsExecution() {
                 <thead>
                   <tr>
                     <th>Activity</th><th>Customer</th><th>Reference</th><th>Owner</th>
-                    <th>Participants</th><th>Status</th><th className="num">Duration</th><th></th>
+                    <th>Participants</th><th>Status</th><th>Started</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -409,7 +396,7 @@ export default function OperationsExecution() {
                         <td>{a.ownerName}</td>
                         <td>{(a.participants || []).map((p) => p.name).join(', ') || '—'}</td>
                         <td><StatusBadge status={a.status} /></td>
-                        <td className="num">{fmtDuration(activityDuration(a))}</td>
+                        <td>{fmtTime(a.startTime)}</td>
                         <td>
                           {joined ? (
                             <button className="btn btn-sm btn-ghost" onClick={() => leaveActivity(a.id)}>Leave</button>
