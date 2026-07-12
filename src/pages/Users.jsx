@@ -3,6 +3,53 @@ import { useStore, PAGES, ROLES, ROLE_PAGES } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
 import { passwordPolicyError } from '../utils.js'
 
+function BackupsCard() {
+  const { listBackups, restoreBackup } = useStore()
+  const [snapshots, setSnapshots] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  async function load() {
+    setLoading(true)
+    setSnapshots(await listBackups())
+    setLoading(false)
+  }
+
+  async function restore(s) {
+    if (!window.confirm(`Restore the database to the backup from ${new Date(s.savedAt).toLocaleString()}? The current state is snapshotted first so you can undo.`)) return
+    if (await restoreBackup(s.id)) load()
+  }
+
+  return (
+    <div className="card">
+      <div className="spread" style={{ marginBottom: 12 }}>
+        <div className="card-title" style={{ marginBottom: 0 }}>💾 Database Backups</div>
+        <button className="btn btn-sm btn-outline" onClick={load} disabled={loading}>{loading ? 'Loading…' : '↻ Load backups'}</button>
+      </div>
+      <p style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 10 }}>
+        Automatic point-in-time snapshots (taken periodically as the database changes). Restore recovers the whole database to a chosen point; the current state is snapshotted first so a restore can be undone.
+      </p>
+      {snapshots == null ? null : snapshots.length === 0 ? (
+        <EmptyState icon="💾" title="No backups yet" hint="Snapshots appear here as the database is used." />
+      ) : (
+        <div className="table-wrap">
+          <table className="data">
+            <thead><tr><th>Taken</th><th className="num">Version</th><th></th></tr></thead>
+            <tbody>
+              {snapshots.map((s) => (
+                <tr key={s.id}>
+                  <td>{new Date(s.savedAt).toLocaleString()}</td>
+                  <td className="num">{s.version}</td>
+                  <td><button className="btn btn-sm btn-warn" onClick={() => restore(s)}>Restore</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function UserModal({ record, onClose }) {
   const { db, upsert, toast, logAction, setUserPassword } = useStore()
   const [r, setR] = useState(
@@ -169,6 +216,8 @@ export default function Users() {
           Reset Database to Seed Data
         </button>
       </div>
+
+      {currentUser.role === 'Developer' && <BackupsCard />}
 
       {modal && <UserModal record={modal === 'new' ? null : modal} onClose={() => setModal(null)} />}
     </div>

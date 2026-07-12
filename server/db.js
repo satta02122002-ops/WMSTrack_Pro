@@ -1,5 +1,6 @@
 import pg from 'pg'
 import { applyChanges } from './merge.js'
+import { shouldSnapshot, SNAPSHOT_KEEP } from './snapshot.js'
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
@@ -20,7 +21,56 @@ async function init() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_state_history (
+      id BIGSERIAL PRIMARY KEY,
+      version INTEGER NOT NULL,
+      data JSONB NOT NULL,
+      saved_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await pool.query('CREATE INDEX IF NOT EXISTS app_state_history_saved_at_idx ON app_state_history (saved_at DESC)')
   initialized = true
+}
+
+// Best-effort point-in-time backup. Time-spaced and pruned so it never blocks
+// or breaks a save — any failure is logged and swallowed.
+async function captureSnapshot(data, version) {
+  try {
+    const { rows } = await pool.query('SELECT EXTRACT(EPOCH FROM MAX(saved_at)) * 1000 AS last FROM app_state_history')
+    const lastMs = rows[0]?.last != null ? Number(rows[0].last) : null
+    if (!shouldSnapshot(lastMs)) return
+    await pool.query('INSERT INTO app_state_history (version, data) VALUES ($1, $2)', [version, JSON.stringify(data)])
+    await pool.query(
+      'DELETE FROM app_state_history WHERE id NOT IN (SELECT id FROM app_state_history ORDER BY saved_at DESC LIMIT $1)',
+      [SNAPSHOT_KEEP],
+    )
+  } catch (err) {
+    console.error('Snapshot capture failed (non-fatal):', err.message)
+  }
+}
+
+export async function listSnapshots() {
+  await init()
+  const { rows } = await pool.query('SELECT id, version, saved_at FROM app_state_history ORDER BY saved_at DESC LIMIT 100')
+  return rows.map((r) => ({ id: String(r.id), version: r.version, savedAt: r.saved_at }))
+}
+
+export async function getSnapshotData(id) {
+  await init()
+  const { rows } = await pool.query('SELECT data FROM app_state_history WHERE id = $1', [id])
+  return rows.length ? rows[0].data : null
+}
+
+// Force a snapshot of the current state regardless of cadence (used before a
+// restore so the restore itself is undoable). Best-effort.
+export async function forceSnapshot() {
+  try {
+    const cur = await getState()
+    if (cur) await pool.query('INSERT INTO app_state_history (version, data) VALUES ($1, $2)', [cur.version, JSON.stringify(cur.data)])
+  } catch (err) {
+    console.error('forceSnapshot failed (non-fatal):', err.message)
+  }
 }
 
 export async function getState() {
@@ -42,6 +92,7 @@ export async function setState(data) {
      RETURNING version`,
     [JSON.stringify(data)],
   )
+  await captureSnapshot(data, rows[0].version)
   return rows[0].version
 }
 
@@ -65,6 +116,7 @@ export async function applyChangesTx(changes) {
       [JSON.stringify(merged)],
     )
     await client.query('COMMIT')
+    await captureSnapshot(merged, up[0].version)
     return { data: merged, version: up[0].version }
   } catch (e) {
     await client.query('ROLLBACK')

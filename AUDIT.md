@@ -31,7 +31,7 @@ A first automated **test suite (17 tests)** and a **CI pipeline** were added;
 | Architecture | 68 / 100 |
 | Frontend | 82 / 100 |
 | Backend | 74 / 100 |
-| Database | 45 / 100 |
+| Database | 55 / 100 |
 | Security | 86 / 100 |
 | Performance | 66 / 100 |
 | Maintainability | 80 / 100 |
@@ -94,19 +94,24 @@ needs a larger decision).
 
 ### Medium
 
-**M1 — Data layer is a single JSONB document** · _Pending (architectural)_
+**M1 — Data layer is a single JSONB document** · _Planned + partially mitigated_
 - No normalization, foreign keys, per-entity indexes, or migration framework;
   integrity lives only in app code. Fine at current scale, but the ceiling for
   querying, reporting, and concurrent write throughput.
-- **Recommended path:** migrate high-volume entities (operations, storage
-  movements, billed records) to real tables with indexes and FKs; keep
-  reference data as-is initially.
+- **Action:** a concrete staged migration design is documented in
+  `docs/DB_MIGRATION_PLAN.md` (target schema + dual-write/backfill/cutover +
+  rollback). Not executed yet — it needs a staging database and an integration
+  test harness, so it is deliberately not run blind against production.
+- **Shipped now:** the most pressing integrity gap — **zero backups** — is
+  closed with automatic point-in-time snapshots (`app_state_history`) and a
+  Developer-only restore.
 
-**M2 — Whole-document read on every poll + full in-memory state** · _Pending (architectural)_
+**M2 — Whole-document read on every poll + full in-memory state** · _Planned_
 - Each client holds the entire DB in memory and re-fetches the whole document
   every 5s. Works for thousands of records; won't scale to large datasets.
-- **Recommended path:** delta/ETag polling or push (SSE/WebSocket), and
-  server-side pagination for history/billing tables.
+- **Action:** addressed by phases 3–4 of the migration plan (per-view REST
+  endpoints with pagination; move high-volume collections out of the in-memory
+  document). Sync already avoids whole-document write clobbering.
 
 **M3 — Merge logic mixed into `db.js`** · _Fixed_
 - Extracted the pure record-level merge into `server/merge.js` (separation of

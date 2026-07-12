@@ -3,7 +3,7 @@ import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { getState, setState, applyChangesTx } from './db.js'
+import { getState, setState, applyChangesTx, listSnapshots, getSnapshotData, forceSnapshot } from './db.js'
 import { hashPassword, verifyPassword, isLegacyHash, signToken, authMiddleware, validatePassword } from './auth.js'
 import { seedDb } from './seed.js'
 import { filterAuthorizedChanges } from './authz.js'
@@ -316,6 +316,38 @@ app.post('/api/db/clear-demo-data', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('POST /api/db/clear-demo-data error:', err)
     res.status(500).json({ error: 'Failed to clear demo data' })
+  }
+})
+
+// ---- Backups (point-in-time snapshots) — Developer only -------------------
+
+app.get('/api/db/history', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'Developer') {
+      return res.status(403).json({ error: 'Only Developer role can view backups' })
+    }
+    res.json({ snapshots: await listSnapshots() })
+  } catch (err) {
+    console.error('GET /api/db/history error:', err)
+    res.status(500).json({ error: 'Failed to list backups' })
+  }
+})
+
+app.post('/api/db/restore', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'Developer') {
+      return res.status(403).json({ error: 'Only Developer role can restore backups' })
+    }
+    const { id } = req.body
+    if (!id) return res.status(400).json({ error: 'Snapshot id is required' })
+    const data = await getSnapshotData(id)
+    if (!data) return res.status(404).json({ error: 'Snapshot not found' })
+    await forceSnapshot() // preserve the current state so the restore is undoable
+    const version = await setState(data)
+    res.json({ ok: true, version, data: stripPasswordHashes(data) })
+  } catch (err) {
+    console.error('POST /api/db/restore error:', err)
+    res.status(500).json({ error: 'Failed to restore backup' })
   }
 })
 

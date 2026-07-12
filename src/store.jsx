@@ -823,6 +823,41 @@ export function StoreProvider({ children }) {
     }
   }, [toast])
 
+  const listBackups = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/db/history`, { headers: authHeaders() })
+      if (!res.ok) return []
+      const { snapshots } = await res.json()
+      return snapshots || []
+    } catch {
+      return []
+    }
+  }, [])
+
+  const restoreBackup = useCallback(async (id) => {
+    try {
+      const res = await fetch(`${API_BASE}/db/restore`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ id }),
+      })
+      const result = await res.json()
+      if (!res.ok || !result.ok) {
+        toast(result.error || 'Failed to restore backup', 'error')
+        return false
+      }
+      if (result.data) {
+        baselineRef.current = result.data
+        setDb(result.data)
+      }
+      toast('Database restored from backup', 'info')
+      return true
+    } catch {
+      toast('Failed to restore backup', 'error')
+      return false
+    }
+  }, [toast])
+
   // ---- Loading state ---------------------------------------------------------
 
   if (dbError) {
@@ -859,6 +894,7 @@ export function StoreProvider({ children }) {
       recordBilling: () => {}, unbillRecords: () => {}, billedMap: new Map(),
       logAction: () => {}, toast, toasts,
       pagesForUser, resetDb: () => {}, clearDemoData: () => {},
+      listBackups: async () => [], restoreBackup: async () => false,
       saveStatus: 'saved',
       setUserPassword: async () => ({ ok: false }),
     }
@@ -874,6 +910,7 @@ export function StoreProvider({ children }) {
     recordBilling, unbillRecords, billedMap,
     logAction, toast, toasts,
     pagesForUser, resetDb, clearDemoData,
+    listBackups, restoreBackup,
     saveStatus,
     setUserPassword,
   }
