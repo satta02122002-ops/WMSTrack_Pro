@@ -15,7 +15,7 @@ function linesFrom(record, qtyKey, uomKey, linesKey) {
   return [{ qty: '', uom: '' }]
 }
 
-function ManualActivityModal({ activity, onClose }) {
+export function ManualActivityModal({ activity, onClose }) {
   const { db, update, toast, session, updateOperationsActivity } = useStore()
   const editing = !!activity
   const [customerName, setCustomerName] = useState(activity?.customerName || '')

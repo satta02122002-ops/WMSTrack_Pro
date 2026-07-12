@@ -4,13 +4,16 @@ import { Select, EmptyState, StatusBadge } from '../components/ui.jsx'
 import { fmtDate, fmtDuration, fmtNum, num, round2, todayISO, qtyDisplay, monthKey, firstOfMonthISO } from '../utils.js'
 import { exportXlsx, exportCsv } from '../excel.js'
 import { computeBillingLines } from '../billing.js'
+import { ManualActivityModal } from './OperationsMonitor.jsx'
 
 export default function Reports() {
-  const { db } = useStore()
+  const { db, currentUser, deleteOperationsActivity } = useStore()
+  const canManageOps = currentUser.role === 'Developer'
   const [tab, setTab] = useState('operations')
   const [from, setFrom] = useState(firstOfMonthISO())
   const [to, setTo] = useState(todayISO())
   const [customer, setCustomer] = useState('')
+  const [editActivity, setEditActivity] = useState(null)
 
   const inRange = (d) => (!from || d >= from) && (!to || d <= to)
   const custOk = (c) => !customer || c === customer
@@ -105,7 +108,7 @@ export default function Reports() {
             <div className="table-wrap">
               <table className="data">
                 <thead>
-                  <tr><th>Date</th><th>Customer</th><th>Reference</th><th>Activity</th><th>Owner</th><th className="num">Duration</th><th className="num">Qty</th><th>UOM</th><th className="num">CBM</th><th>Outcome</th></tr>
+                  <tr><th>Date</th><th>Customer</th><th>Reference</th><th>Activity</th><th>Owner</th><th className="num">Duration</th><th className="num">Qty</th><th>UOM</th><th className="num">CBM</th><th>Outcome</th>{canManageOps && <th></th>}</tr>
                 </thead>
                 <tbody>
                   {operations.map((a) => (
@@ -113,11 +116,19 @@ export default function Reports() {
                       <td>{fmtDate(a.date)}</td><td><b>{a.customerName}</b></td><td>{a.customerRef}</td><td>{a.type}</td><td>{a.ownerName}</td>
                       <td className="num">{fmtDuration(a.durationSeconds)}</td><td className="num" style={{ whiteSpace: 'nowrap' }}>{qtyDisplay(a)}</td><td>{a.qtyLines?.length > 1 ? <span className="badge badge-blue">MULTI</span> : a.uom ?? '—'}</td>
                       <td className="num">{a.cbm ?? '—'}</td><td><StatusBadge status={a.outcome} /></td>
+                      {canManageOps && (
+                        <td>
+                          <div className="row" style={{ gap: 5, flexWrap: 'nowrap' }}>
+                            <button className="btn btn-sm btn-ghost" onClick={() => setEditActivity(a)}>Edit</button>
+                            <button className="btn btn-sm btn-danger" onClick={() => window.confirm('Delete this activity? Its storage movement and billing lines will be removed. This cannot be undone.') && deleteOperationsActivity(a.id)}>✕</button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr><td colSpan={6}>Total activities: {operations.length}</td><td className="num">{fmtNum(operations.reduce((s, a) => s + num(a.qty), 0), 0)}</td><td></td><td className="num">{fmtNum(operations.reduce((s, a) => s + num(a.cbm), 0))}</td><td></td></tr>
+                  <tr><td colSpan={6}>Total activities: {operations.length}</td><td className="num">{fmtNum(operations.reduce((s, a) => s + num(a.qty), 0), 0)}</td><td></td><td className="num">{fmtNum(operations.reduce((s, a) => s + num(a.cbm), 0))}</td><td></td>{canManageOps && <td></td>}</tr>
                 </tfoot>
               </table>
             </div>
@@ -196,6 +207,8 @@ export default function Reports() {
           )
         )}
       </div>
+
+      {editActivity && canManageOps && <ManualActivityModal activity={editActivity} onClose={() => setEditActivity(null)} />}
     </div>
   )
 }
