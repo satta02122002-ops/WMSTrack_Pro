@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { uid, todayISO, nowISO, toISODate, activityDuration, round2, num, daysToMonthEnd } from './utils.js'
+import { uid, todayISO, nowISO, activityDuration, round2, num } from './utils.js'
 
 const SESSION_KEY = 'wmstrack_pro_session_v1'
 export const REMEMBER_KEY = 'wmstrack_pro_remember_uid'
@@ -156,7 +156,6 @@ export function StoreProvider({ children }) {
   const [dbError, setDbError] = useState(null)
   const [session, setSession] = useState(loadSession)
   const [toasts, setToasts] = useState([])
-  const [prefill, setPrefill] = useState(null)
   const [saveStatus, setSaveStatus] = useState('saved')
   const dbRef = useRef(db)
   dbRef.current = db
@@ -370,7 +369,6 @@ export function StoreProvider({ children }) {
         setToken(null)
         setSession(null)
         setDb(null)
-        setPrefill(null)
         initialLoadRef.current = true
       }, 50)
     },
@@ -470,61 +468,6 @@ export function StoreProvider({ children }) {
       ) || null
     )
   }, [db?.operationsActivities, currentUser])
-
-  const startActivity = useCallback(
-    ({ customerName, customerRef, type }) => {
-      if (!currentUser) return
-      const master = dbRef.current.activitiesMaster.find((a) => a.name === type)
-      const act = {
-        id: uid('op'), customerName, customerRef, date: todayISO(),
-        type, storageType: master?.storageType || null, status: 'in_progress',
-        startTime: nowISO(), endTime: null,
-        accumulatedSeconds: 0, lastResumeTime: nowISO(), durationSeconds: null,
-        qty: null, uom: null, cbm: null, storageTypeUsed: null,
-        handlingMode: null, vehicleType: null, truckCount: null, packageQty: null, packageUom: null,
-        owner: currentUser.userId, ownerName: currentUser.name, participants: [], outcome: null,
-      }
-      update((d) =>
-        logEntry(currentUser.name, 'Start Activity', 'Operations', `${type} for ${customerName} (${customerRef})`)({
-          ...d,
-          operationsActivities: [act, ...d.operationsActivities],
-        }),
-      )
-      toast(`Activity "${type}" started`)
-      return act
-    },
-    [currentUser, update, logEntry, toast],
-  )
-
-  // Admin/Supervisor create an activity and (optionally) assign it to a user.
-  // It waits as 'assigned' until a user starts executing it.
-  const addActivity = useCallback(
-    ({ customerName, customerRef, type, assignedTo }) => {
-      if (!currentUser) return
-      const master = dbRef.current.activitiesMaster.find((a) => a.name === type)
-      const assignee = assignedTo ? dbRef.current.users.find((u) => u.userId === assignedTo) : null
-      const act = {
-        id: uid('op'), customerName, customerRef, date: todayISO(),
-        type, storageType: master?.storageType || null, status: 'assigned',
-        startTime: null, endTime: null,
-        accumulatedSeconds: 0, lastResumeTime: null, durationSeconds: null,
-        qty: null, uom: null, cbm: null, storageTypeUsed: null,
-        handlingMode: null, vehicleType: null, truckCount: null, packageQty: null, packageUom: null,
-        assignedTo: assignedTo || null, assignedToName: assignee?.name || null,
-        owner: null, ownerName: null, participants: [], outcome: null,
-        createdBy: currentUser.userId, createdByName: currentUser.name,
-      }
-      update((d) =>
-        logEntry(currentUser.name, 'Assign Activity', 'Operations', `${type} for ${customerName} (${customerRef})${assignee ? ` → ${assignee.name}` : ' (unassigned)'}`)({
-          ...d,
-          operationsActivities: [act, ...d.operationsActivities],
-        }),
-      )
-      toast(`Activity "${type}" added${assignee ? ` for ${assignee.name}` : ''}`)
-      return act
-    },
-    [currentUser, update, logEntry, toast],
-  )
 
   // Add several activities at once for the same customer + reference — one
   // assigned activity per selected type (same job, different activities).
@@ -845,14 +788,12 @@ export function StoreProvider({ children }) {
       db: null, update: () => {}, upsert: () => {}, remove: () => {},
       session: null, currentUser: null, login, logout: () => {}, changePassword: async () => ({ ok: false }),
       isCheckedIn: false, needsCheckIn: false, attendanceRequired: false, todayAttendance: null, checkIn: () => {}, checkOut: () => {},
-      myActiveActivity: null, startActivity: () => {}, addActivity: () => {}, addActivities: () => {}, startAssignedActivity: () => {},
+      myActiveActivity: null, addActivities: () => {}, startAssignedActivity: () => {},
       pauseActivity: () => {}, resumeActivity: () => {},
       joinActivity: () => {}, leaveActivity: () => {}, endActivity: () => {},
       recordBilling: () => {}, unbillRecords: () => {}, billedMap: new Map(),
       logAction: () => {}, toast, toasts,
-      prefill: null, setPrefill: () => {},
       pagesForUser, resetDb: () => {}, clearDemoData: () => {},
-      storageDaysDefault: daysToMonthEnd,
       saveStatus: 'saved',
       setUserPassword: async () => ({ ok: false }),
     }
@@ -863,12 +804,10 @@ export function StoreProvider({ children }) {
     db, update, upsert, remove,
     session, currentUser, login, logout, changePassword,
     isCheckedIn, needsCheckIn, attendanceRequired, todayAttendance, checkIn, checkOut,
-    myActiveActivity, startActivity, addActivity, addActivities, startAssignedActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, endActivity,
+    myActiveActivity, addActivities, startAssignedActivity, pauseActivity, resumeActivity, joinActivity, leaveActivity, endActivity,
     recordBilling, unbillRecords, billedMap,
     logAction, toast, toasts,
-    prefill, setPrefill,
     pagesForUser, resetDb, clearDemoData,
-    storageDaysDefault: daysToMonthEnd,
     saveStatus,
     setUserPassword,
   }

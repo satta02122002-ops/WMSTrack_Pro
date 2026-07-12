@@ -185,6 +185,12 @@ app.post('/api/db/sync', authMiddleware, async (req, res) => {
     if (!changes || typeof changes !== 'object' || Array.isArray(changes)) {
       return res.status(400).json({ error: 'Missing or invalid changes' })
     }
+    // Authorization: only Admin/Developer may write the users collection.
+    // Without this, any authenticated client could sync a users change and
+    // escalate its own role (e.g. to Developer) or tamper with other accounts.
+    if ('users' in changes && !['Admin', 'Developer'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'You are not allowed to modify users' })
+    }
     const result = await applyChangesTx(changes)
     if (!result) return res.status(500).json({ error: 'Database not initialized' })
     res.json({ ok: true, version: result.version, data: stripPasswordHashes(result.data) })
