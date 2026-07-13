@@ -3,7 +3,7 @@ import { useStore } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
 import ImportButton from '../components/ImportButton.jsx'
 import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
-import { fmtDate, fmtNum, num, todayISO, pkgDisplay, storageTypeNames, accountHolderOf, accountHolderNames, customerNames } from '../utils.js'
+import { fmtDate, fmtNum, num, todayISO, pkgDisplay, storageTypeNames, accountHolderOf, accountHolderNames, customerNames, sameHolder } from '../utils.js'
 import { exportXlsx } from '../excel.js'
 import { manualHandlingAmount } from '../billing.js'
 
@@ -274,7 +274,7 @@ export default function StorageHandling() {
       db.storageMovements
         .filter((m) =>
           (!fCustomer || m.customer === fCustomer) &&
-          (!fAccountHolder || accountHolderOf(db, m.customer) === fAccountHolder) &&
+          (!fAccountHolder || sameHolder(accountHolderOf(db, m.customer), fAccountHolder)) &&
           (!fType || m.type === fType) &&
           (!fFrom || m.date >= fFrom) &&
           (!fTo || m.date <= fTo),
@@ -369,7 +369,7 @@ export default function StorageHandling() {
           <div className="spread" style={{ marginBottom: 12 }}>
             <div className="row">
               <Select value={fCustomer} onChange={setFCustomer} options={customerNames(db, fAccountHolder)} placeholder="All customers" style={{ width: 180 }} />
-              <Select value={fAccountHolder} onChange={(v) => { setFAccountHolder(v); if (v && accountHolderOf(db, fCustomer) !== v) setFCustomer('') }} options={accountHolderNames(db)} placeholder="All account holders" style={{ width: 180 }} />
+              <Select value={fAccountHolder} onChange={(v) => { setFAccountHolder(v); if (v && !sameHolder(accountHolderOf(db, fCustomer), v)) setFCustomer('') }} options={accountHolderNames(db)} placeholder="All account holders" style={{ width: 180 }} />
               <Select value={fType} onChange={setFType} options={['Inbound', 'Outbound']} placeholder="All types" style={{ width: 130 }} />
               <input type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} />
               <input type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} />

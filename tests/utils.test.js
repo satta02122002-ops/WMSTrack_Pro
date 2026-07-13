@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { round2, num, daysToMonthEnd, storageTypeNames, accountHolderNames, accountHolderOf, customerNames } from '../src/utils.js'
+import { round2, num, daysToMonthEnd, storageTypeNames, accountHolderNames, accountHolderOf, customerNames, sameHolder } from '../src/utils.js'
 import { monthsInRange } from '../src/billing.js'
 
 test('round2 rounds to two decimals', () => {
@@ -63,6 +63,26 @@ test('customerNames cascades to a selected account holder', () => {
   assert.deepEqual(customerNames(db, 'Omar'), ['Gulf'])
   assert.deepEqual(customerNames(db, 'Nobody'), []) // holder with no customers
   assert.deepEqual(customerNames({}), []) // legacy db without customers
+})
+
+test('account holders match case-insensitively (imported vs managed casing)', () => {
+  // Real-world: customer imported as "SATTANATHAN", managed list has "Sattanathan".
+  const db = {
+    accountHolders: [{ id: 'a1', name: 'Sattanathan' }],
+    customers: [
+      { id: 'c1', name: 'Aspireli', accountHolder: 'SATTANATHAN' },
+      { id: 'c2', name: 'Hitachi', accountHolder: ' sattanathan ' },
+      { id: 'c3', name: 'Jaison Co', accountHolder: 'JAISON' }, // holder not in managed list
+    ],
+  }
+  assert.ok(sameHolder('SATTANATHAN', 'Sattanathan'))
+  assert.ok(sameHolder(' sattanathan ', 'Sattanathan'))
+  assert.ok(!sameHolder('Jaison', 'Sattanathan'))
+  // dropdown offers managed holder + any assigned holder (deduped, managed casing wins)
+  assert.deepEqual(accountHolderNames(db), ['Sattanathan', 'JAISON'])
+  // selecting the managed casing still finds the differently-cased customers
+  assert.deepEqual(customerNames(db, 'Sattanathan'), ['Aspireli', 'Hitachi'])
+  assert.deepEqual(customerNames(db, 'jaison'), ['Jaison Co'])
 })
 
 test('monthsInRange enumerates months inclusively', () => {

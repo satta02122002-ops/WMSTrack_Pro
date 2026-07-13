@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, EmptyState, StatusBadge } from '../components/ui.jsx'
-import { fmtDate, fmtNum, num, round2, todayISO, monthName, accountHolderOf, accountHolderNames, customerNames } from '../utils.js'
+import { fmtDate, fmtNum, num, round2, todayISO, monthName, accountHolderOf, accountHolderNames, customerNames, sameHolder } from '../utils.js'
 import { computeBillingLinesRange } from '../billing.js'
 import { exportXlsx } from '../excel.js'
 
@@ -34,7 +34,7 @@ export default function MonthlyBilling() {
     if (!applied) return []
     return allLines.filter((l) => {
       if (applied.customer && l.customerName !== applied.customer) return false
-      if (applied.accountHolder && accountHolderOf(db, l.customerName) !== applied.accountHolder) return false
+      if (applied.accountHolder && !sameHolder(accountHolderOf(db, l.customerName), applied.accountHolder)) return false
       if (applied.reportType && l.reportType !== applied.reportType) return false
       const billed = billedMap.get(l.id)
       if (applied.billStatus === 'notbilled' && billed) return false
@@ -169,7 +169,7 @@ export default function MonthlyBilling() {
             <Select value={customer} onChange={setCustomer} options={customerNames(db, accountHolder)} placeholder="All customers" />
           </Field>
           <Field label="Account Holder">
-            <Select value={accountHolder} onChange={(v) => { setAccountHolder(v); if (v && accountHolderOf(db, customer) !== v) setCustomer('') }} options={accountHolderNames(db)} placeholder="All account holders" />
+            <Select value={accountHolder} onChange={(v) => { setAccountHolder(v); if (v && !sameHolder(accountHolderOf(db, customer), v)) setCustomer('') }} options={accountHolderNames(db)} placeholder="All account holders" />
           </Field>
           <Field label="Report Type">
             <Select value={reportType} onChange={setReportType} options={['Activities', 'Storage', 'Handling', 'VAS']} placeholder="All" />

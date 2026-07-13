@@ -86,9 +86,37 @@ export function passwordPolicyError(password) {
 
 export const DEFAULT_STORAGE_TYPES = ['Normal Storage', 'Cold Storage', 'Bonded Storage']
 
-// Account holders (customer account managers) — a managed reference list.
+// Account holders (customer account managers). Names are matched
+// case-insensitively (and trimmed) because customers can be imported from Excel
+// with a different casing/spacing than the managed Parameter list — e.g. a
+// customer stored as "SATTANATHAN" must still match the holder "Sattanathan".
+function normHolder(s) {
+  return String(s || '').trim().toLowerCase()
+}
+
+/** True when two account-holder names refer to the same holder (case/space-insensitive). */
+export function sameHolder(a, b) {
+  return normHolder(a) === normHolder(b)
+}
+
+/**
+ * Account-holder options for dropdowns: the managed Parameter list unioned with
+ * any holder actually assigned to a customer (so imported holders, or holders
+ * with a casing the managed list doesn't have, are still filterable).
+ * Deduplicated case-insensitively; the managed-list casing wins.
+ */
 export function accountHolderNames(db) {
-  return (db.accountHolders || []).map((a) => a.name)
+  const out = []
+  const seen = new Set()
+  const push = (name) => {
+    const key = normHolder(name)
+    if (!key || seen.has(key)) return
+    seen.add(key)
+    out.push(name)
+  }
+  for (const a of db.accountHolders || []) if (a?.name) push(a.name)
+  for (const c of db.customers || []) if (c?.accountHolder) push(c.accountHolder)
+  return out
 }
 
 /** The account holder assigned to a customer (by customer name), or ''. */
@@ -99,11 +127,12 @@ export function accountHolderOf(db, customerName) {
 /**
  * Customer names for a dropdown, optionally narrowed to a single account holder.
  * When an account holder is selected the list contains only that holder's
- * customers (Master Data assignment); with no holder it is every customer.
+ * customers (Master Data assignment, matched case-insensitively); with no holder
+ * it is every customer.
  */
 export function customerNames(db, accountHolder = '') {
   return (db.customers || [])
-    .filter((c) => !accountHolder || c.accountHolder === accountHolder)
+    .filter((c) => !accountHolder || sameHolder(c.accountHolder, accountHolder))
     .map((c) => c.name)
 }
 
