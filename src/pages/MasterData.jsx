@@ -3,7 +3,7 @@ import { useStore } from '../store.jsx'
 import { Modal, Field, Select, EmptyState } from '../components/ui.jsx'
 import ImportButton from '../components/ImportButton.jsx'
 import { HandlingRateModal } from './StorageHandling.jsx'
-import { fmtNum, num, storageTypeNames } from '../utils.js'
+import { fmtNum, num, storageTypeNames, sameHolder } from '../utils.js'
 import { exportXlsx } from '../excel.js'
 
 function CustomerModal({ record, onClose }) {
@@ -155,12 +155,28 @@ export default function MasterData() {
   // ---- Bulk imports ----
   const importCustomers = (rows) => {
     let imported = 0, skipped = 0
+    // Canonical account-holder names — seed from the managed Parameter list and
+    // extend as new ones appear, so an imported "SATTANATHAN" snaps to the
+    // existing "Sattanathan" and never-before-seen holders get registered once.
+    const holders = (db.accountHolders || []).map((a) => a.name)
     for (const row of rows) {
       if (!row.name) { skipped++; continue }
       const existing = db.customers.find((c) => c.name.toLowerCase() === String(row.name).toLowerCase())
+      const rawHolder = String(row.accountHolder || '').trim()
+      let accountHolder = existing?.accountHolder || ''
+      if (rawHolder) {
+        const canonical = holders.find((h) => sameHolder(h, rawHolder))
+        if (canonical) {
+          accountHolder = canonical
+        } else {
+          accountHolder = rawHolder
+          holders.push(rawHolder)
+          upsert('accountHolders', { name: rawHolder }, { entityType: 'Parameter', label: 'account holder (import)' })
+        }
+      }
       upsert('customers', {
         ...(existing || {}), name: String(row.name), currency: String(row.currency || 'USD'),
-        accountHolder: String(row.accountHolder || existing?.accountHolder || ''),
+        accountHolder,
         references: String(row.references || '').split(/[;,]/).map((s) => s.trim()).filter(Boolean),
       }, { entityType: 'Master Data', label: 'customer (import)' })
       imported++
