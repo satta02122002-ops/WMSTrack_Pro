@@ -210,7 +210,15 @@ export default function MonthlyBilling() {
           </div>
 
           {lines.length === 0 ? (
-            <EmptyState icon="💰" title={`No billable lines for ${rangeLabel}`} hint="Complete activities, storage movements or VAS charges in this date range to generate billing." />
+            applied?.accountHolder && customerNames(db, applied.accountHolder).length === 0 ? (
+              <EmptyState
+                icon="🧑‍💼"
+                title={`No customers are assigned to “${applied.accountHolder}”`}
+                hint="Open Master Data → Customers, edit each customer that belongs to this account holder, and set their “Account holder” field. Billing filters by that assignment — until at least one customer is mapped, this account holder shows nothing."
+              />
+            ) : (
+              <EmptyState icon="💰" title={`No billable lines for ${rangeLabel}`} hint="Complete activities, storage movements or VAS charges in this date range to generate billing." />
+            )
           ) : (
             <div className="table-wrap">
               <table className="data">
