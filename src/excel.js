@@ -83,21 +83,25 @@ export const IMPORT_TEMPLATES = {
   },
   handlingRates: {
     label: 'Handling Rates',
-    headers: ['customer', 'container20', 'container40', 'trailer20', 'trailer40', 'loosePerCbm', 'minimumCharge', 'monthlyMinimum', 'currency', 'billByCbm'],
-    sample: [{ customer: 'Example Customer Ltd', container20: 90, container40: 140, trailer20: 80, trailer40: 120, loosePerCbm: 3.5, minimumCharge: 50, monthlyMinimum: 0, currency: 'USD', billByCbm: 'no' }],
-    note: 'container/trailer rates are per truck; loose rate is per CBM; billByCbm yes = always charge CBM x loose rate even for container/trailer',
+    headers: ['customer', 'direction', 'vehicle', 'size', 'handlingUom', 'rate', 'minimumCharge', 'monthlyMinimum', 'currency', 'billByCbm'],
+    sample: [
+      { customer: 'Example Customer Ltd', direction: 'IN', vehicle: 'Container', size: '20ft', handlingUom: 'Palletized', rate: 90, minimumCharge: 50, monthlyMinimum: 0, currency: 'USD', billByCbm: 'no' },
+      { customer: 'Example Customer Ltd', direction: 'OUT', vehicle: 'Trailer', size: '40ft', handlingUom: 'Loose', rate: 120, minimumCharge: 50, monthlyMinimum: 0, currency: 'USD', billByCbm: 'no' },
+      { customer: 'Example Customer Ltd', direction: '', vehicle: 'Loose', size: '3-ton', handlingUom: 'Loose', rate: 3.5, minimumCharge: 50, monthlyMinimum: 0, currency: 'USD', billByCbm: 'no' },
+    ],
+    note: 'one row per rate line; rows for the same customer build a rate matrix. direction: IN, OUT or blank (any); vehicle: Container, Trailer or Loose; size/handlingUom blank = any. Container/Trailer rate is per truck; Loose rate is per CBM. billByCbm yes = always charge CBM x Loose rate.',
   },
   storageMovements: {
     label: 'Storage Movements',
-    headers: ['customer', 'date', 'reference', 'type', 'cbm', 'storage', 'handlingMode', 'containerSize', 'truckCount', 'packageQty', 'packageUom', 'storageDays', 'applyHandling'],
-    sample: [{ customer: 'Example Customer Ltd', date: '2026-07-01', type: 'Inbound', reference: 'REF-001', cbm: 25, storage: 'Normal Storage', handlingMode: 'Container', containerSize: '40ft', truckCount: 1, packageQty: 100, packageUom: 'CTN', storageDays: '', applyHandling: 'yes' }],
-    note: 'type: Inbound or Outbound; handlingMode: Container, Trailer or Loose; date in YYYY-MM-DD; applyHandling: yes/no (default yes) — whether to bill handling charges',
+    headers: ['customer', 'date', 'reference', 'type', 'cbm', 'storage', 'handlingMode', 'containerSize', 'handlingUom', 'truckCount', 'packageQty', 'packageUom', 'storageDays', 'applyHandling'],
+    sample: [{ customer: 'Example Customer Ltd', date: '2026-07-01', type: 'Inbound', reference: 'REF-001', cbm: 25, storage: 'Normal Storage', handlingMode: 'Container', containerSize: '40ft', handlingUom: 'Palletized', truckCount: 1, packageQty: 100, packageUom: 'CTN', storageDays: '', applyHandling: 'yes' }],
+    note: 'type: Inbound or Outbound; handlingMode: Container, Trailer or Loose; handlingUom: Palletized or Loose; date in YYYY-MM-DD; applyHandling: yes/no (default yes) — whether to bill handling charges',
   },
   handlingCharges: {
     label: 'Manual Handling Charges',
-    headers: ['customer', 'date', 'reference', 'cbm', 'packageQty', 'packageUom'],
-    sample: [{ customer: 'Example Customer Ltd', date: '2026-07-01', reference: 'JOB-001', cbm: 25, packageQty: 100, packageUom: 'CTN' }],
-    note: 'customer must have a handling rate in Master Data; charge = CBM x loose per-CBM rate (minimum applied); date in YYYY-MM-DD',
+    headers: ['customer', 'date', 'reference', 'direction', 'cbm', 'handling', 'vehicle', 'handlingUom', 'trucks', 'packageQty', 'packageUom'],
+    sample: [{ customer: 'Example Customer Ltd', date: '2026-07-01', reference: 'JOB-001', direction: 'IN', cbm: 25, handling: 'Container', vehicle: '40ft', handlingUom: 'Palletized', trucks: 1, packageQty: 100, packageUom: 'CTN' }],
+    note: 'customer must have a handling rate in Master Data; direction: IN/OUT; handling: Container/Trailer/Loose; vehicle = size (e.g. 20ft); Container/Trailer charge = trucks x rate, Loose = CBM x rate (minimum applied); date in YYYY-MM-DD',
   },
 }
 

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
 import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
-import { fmtTime, num, storageTypeNames } from '../utils.js'
+import { fmtTime, num, storageTypeNames, HANDLING_UOMS } from '../utils.js'
 
 export function EndActivityModal({ activity, onClose }) {
   const { db, endActivity } = useStore()
@@ -14,6 +14,7 @@ export function EndActivityModal({ activity, onClose }) {
   const [storageTypeUsed, setStorageTypeUsed] = useState('')
   const [handlingMode, setHandlingMode] = useState('')
   const [vehicleType, setVehicleType] = useState('')
+  const [handlingUom, setHandlingUom] = useState('')
   const [truckCount, setTruckCount] = useState('1')
   // Offloading/Loading packages can also span several UOMs (recorded on the movement)
   const [pkgLines, setPkgLines] = useState([{ qty: '', uom: '' }])
@@ -36,6 +37,7 @@ export function EndActivityModal({ activity, onClose }) {
       payload = {
         cbm: num(cbm), storageTypeUsed, handlingMode,
         vehicleType: needsVehicle ? vehicleType : null,
+        handlingUom: handlingUom || null,
         truckCount: needsVehicle ? num(truckCount) : null,
         packageLines: cleanPkgs,
         packageQty: qtyLinesTotal(cleanPkgs),
@@ -91,6 +93,11 @@ export function EndActivityModal({ activity, onClose }) {
           </div>
           {handlingMode && (
             <>
+              <div className="form-grid">
+                <Field label="Handling UOM">
+                  <Select value={handlingUom} onChange={setHandlingUom} options={HANDLING_UOMS} placeholder="—" />
+                </Field>
+              </div>
               {needsVehicle && (
                 <div className="form-grid">
                   <Field label="Vehicle Type" required>

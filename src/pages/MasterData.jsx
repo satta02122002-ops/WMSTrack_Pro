@@ -3,7 +3,8 @@ import { useStore } from '../store.jsx'
 import { Modal, Field, Select, EmptyState } from '../components/ui.jsx'
 import ImportButton from '../components/ImportButton.jsx'
 import { HandlingRateModal } from './StorageHandling.jsx'
-import { fmtNum, num, storageTypeNames, sameHolder } from '../utils.js'
+import { fmtNum, num, uid, storageTypeNames, sameHolder } from '../utils.js'
+import { handlingRateLines } from '../billing.js'
 import { exportXlsx } from '../excel.js'
 
 function CustomerModal({ record, onClose }) {
@@ -215,20 +216,57 @@ export default function MasterData() {
     }
     return { imported, skipped }
   }
+  // Handling rates import: one row per rate line (customer + direction + vehicle
+  // + size + handling UOM + rate). Rows for the same customer accumulate into a
+  // rate matrix. Legacy sheets with fixed columns (container20/…/loosePerCbm) are
+  // synthesised into equivalent lines so old templates still import.
   const importHandling = (rows) => {
     let imported = 0, skipped = 0
+    const byCustomer = new Map()
+    const entryFor = (name) => {
+      if (!byCustomer.has(name)) {
+        const existing = db.handlingRates.find((h) => h.customer === name)
+        byCustomer.set(name, {
+          existing, currency: existing?.currency || 'USD',
+          minimumCharge: existing ? num(existing.minimumCharge) : 0,
+          monthlyMinimum: existing ? num(existing.monthlyMinimum) : 0,
+          billByCbm: !!existing?.billByCbm, lines: [],
+        })
+      }
+      return byCustomer.get(name)
+    }
+    const toVehicle = (v) => { const s = String(v || '').trim().toLowerCase(); return s.startsWith('cont') ? 'Container' : s.startsWith('trail') ? 'Trailer' : 'Loose' }
+    const toUom = (u) => { const s = String(u || '').trim().toLowerCase(); return s.startsWith('pall') ? 'Palletized' : s.startsWith('loose') ? 'Loose' : '' }
     for (const row of rows) {
-      if (!row.customer) { skipped++; continue }
-      const existing = db.handlingRates.find((h) => h.customer === String(row.customer))
-      upsert('handlingRates', {
-        ...(existing || {}), customer: String(row.customer),
-        container20: num(row.container20), container40: num(row.container40),
-        trailer20: num(row.trailer20), trailer40: num(row.trailer40),
-        loosePerCbm: num(row.loosePerCbm), minimumCharge: num(row.minimumCharge),
-        monthlyMinimum: num(row.monthlyMinimum), currency: String(row.currency || 'USD'),
-        billByCbm: /^(true|1|yes|y)$/i.test(String(row.billByCbm || '').trim()),
-      }, { entityType: 'Master Data', label: 'handling rates (import)' })
+      const name = String(row.customer || '').trim()
+      if (!name) { skipped++; continue }
+      const e = entryFor(name)
+      if (row.currency) e.currency = String(row.currency)
+      if (row.minimumCharge != null && row.minimumCharge !== '') e.minimumCharge = num(row.minimumCharge)
+      if (row.monthlyMinimum != null && row.monthlyMinimum !== '') e.monthlyMinimum = num(row.monthlyMinimum)
+      if (row.billByCbm != null && row.billByCbm !== '') e.billByCbm = /^(true|1|yes|y)$/i.test(String(row.billByCbm).trim())
+      const vehicleRaw = String(row.vehicle || row.vehicleType || '').trim()
+      if (vehicleRaw && row.rate != null && row.rate !== '') {
+        const dir = String(row.direction || row.handlingType || '').trim().toUpperCase()
+        e.lines.push({
+          id: uid('hrl'), direction: dir === 'IN' || dir === 'OUT' ? dir : '',
+          vehicle: toVehicle(vehicleRaw), size: String(row.size || '').trim(),
+          handlingUom: toUom(row.handlingUom), rate: num(row.rate),
+        })
+      } else {
+        const add = (vehicle, size, val) => { if (num(val)) e.lines.push({ id: uid('hrl'), direction: '', vehicle, size, handlingUom: '', rate: num(val) }) }
+        add('Container', '20ft', row.container20); add('Container', '40ft', row.container40)
+        add('Trailer', '20ft', row.trailer20); add('Trailer', '40ft', row.trailer40)
+        if (num(row.loosePerCbm)) e.lines.push({ id: uid('hrl'), direction: '', vehicle: 'Loose', size: '', handlingUom: '', rate: num(row.loosePerCbm) })
+      }
       imported++
+    }
+    for (const [name, e] of byCustomer) {
+      upsert('handlingRates', {
+        id: e.existing?.id, customer: name, currency: e.currency,
+        minimumCharge: e.minimumCharge, monthlyMinimum: e.monthlyMinimum, billByCbm: e.billByCbm,
+        rateLines: e.lines,
+      }, { entityType: 'Master Data', label: 'handling rates (import)' })
     }
     return { imported, skipped }
   }
@@ -402,16 +440,12 @@ export default function MasterData() {
           {db.handlingRates.length === 0 ? <EmptyState icon="🚛" title="No handling rates" /> : (
             <div className="table-wrap">
               <table className="data">
-                <thead><tr><th>Customer</th><th className="num">Cont. 20ft</th><th className="num">Cont. 40ft</th><th className="num">Trailer 20ft</th><th className="num">Trailer 40ft</th><th className="num">Loose /CBM</th><th className="num">Min</th><th className="num">Monthly Min</th><th>Basis</th><th>Currency</th><th></th></tr></thead>
+                <thead><tr><th>Customer</th><th className="num">Rate Lines</th><th className="num">Min</th><th className="num">Monthly Min</th><th>Basis</th><th>Currency</th><th></th></tr></thead>
                 <tbody>
                   {db.handlingRates.map((r) => (
                     <tr key={r.id}>
                       <td><b>{r.customer}</b></td>
-                      <td className="num">{fmtNum(r.container20)}</td>
-                      <td className="num">{fmtNum(r.container40)}</td>
-                      <td className="num">{fmtNum(r.trailer20)}</td>
-                      <td className="num">{fmtNum(r.trailer40)}</td>
-                      <td className="num">{fmtNum(r.loosePerCbm)}</td>
+                      <td className="num">{handlingRateLines(r).length}</td>
                       <td className="num">{fmtNum(r.minimumCharge)}</td>
                       <td className="num">{fmtNum(r.monthlyMinimum)}</td>
                       <td>{r.billByCbm ? <span className="badge badge-blue">PER CBM</span> : <span className="badge badge-gray">TRUCK/CBM</span>}</td>

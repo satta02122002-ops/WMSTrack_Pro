@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
 import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
-import { activityDuration, fmtDuration, fmtDate, fmtTime, todayISO, nowISO, uid, num, qtyDisplay, storageTypeNames, accountHolderOf, accountHolderNames, customerNames, sameHolder } from '../utils.js'
+import { activityDuration, fmtDuration, fmtDate, fmtTime, todayISO, nowISO, uid, num, qtyDisplay, storageTypeNames, accountHolderOf, accountHolderNames, customerNames, sameHolder, HANDLING_UOMS } from '../utils.js'
 import { exportXlsx } from '../excel.js'
 
 function linesFrom(record, qtyKey, uomKey, linesKey) {
@@ -30,6 +30,7 @@ export function ManualActivityModal({ activity, onClose }) {
   const [storageTypeUsed, setStorageTypeUsed] = useState(activity?.storageTypeUsed || '')
   const [handlingMode, setHandlingMode] = useState(activity?.handlingMode || '')
   const [vehicleType, setVehicleType] = useState(activity?.vehicleType || '')
+  const [handlingUom, setHandlingUom] = useState(activity?.handlingUom || '')
   const [truckCount, setTruckCount] = useState(activity?.truckCount != null ? String(activity.truckCount) : '1')
   const [pkgLines, setPkgLines] = useState(() => linesFrom(activity, 'packageQty', 'packageUom', 'packageLines'))
 
@@ -57,6 +58,7 @@ export function ManualActivityModal({ activity, onClose }) {
       actPayload = {
         cbm: num(cbm), storageTypeUsed, handlingMode,
         vehicleType: needsVehicle ? vehicleType : null,
+        handlingUom: handlingUom || null,
         truckCount: needsVehicle ? num(truckCount) : null,
         packageLines: cleanPkgs,
         packageQty: qtyLinesTotal(cleanPkgs),
@@ -70,7 +72,7 @@ export function ManualActivityModal({ activity, onClose }) {
         qty: qtyLinesTotal(cleanLines),
         uom: cleanLines.length === 1 ? cleanLines[0].uom : null,
         cbm: null, storageTypeUsed: null, handlingMode: null,
-        vehicleType: null, truckCount: null, packageLines: null, packageQty: null, packageUom: null,
+        vehicleType: null, handlingUom: null, truckCount: null, packageLines: null, packageQty: null, packageUom: null,
       }
     }
 
@@ -108,6 +110,7 @@ export function ManualActivityModal({ activity, onClose }) {
           cbm: num(cbm), storage: storageTypeUsed,
           handlingMode: handlingMode || null,
           containerSize: needsVehicle ? vehicleType : null,
+          handlingUom: handlingUom || null,
           truckCount: needsVehicle ? num(truckCount) : null,
           packageQty: actPayload.packageQty, packageUom: actPayload.packageUom,
           packageLines: actPayload.packageLines,
@@ -193,6 +196,11 @@ export function ManualActivityModal({ activity, onClose }) {
             <Field label="Handling Type" required>
               <Select value={handlingMode} onChange={setHandlingMode} options={['Container', 'Trailer', 'Loose']} placeholder="Select handling…" />
             </Field>
+            {handlingMode && (
+              <Field label="Handling UOM">
+                <Select value={handlingUom} onChange={setHandlingUom} options={HANDLING_UOMS} placeholder="—" />
+              </Field>
+            )}
             {needsVehicle && (
               <>
                 <Field label="Vehicle Type" required>

@@ -78,6 +78,31 @@ test('manual handling prices Container/Trailer per truck like operations executi
   assert.equal(manualHandlingAmount(cbmDb, { customerName: 'Acme', cbm: 10, handlingMode: 'Container', vehicleType: '40ft', truckCount: 2 }).amount, 35)
 })
 
+test('handling rate matrix matches by direction, size and handling UOM', () => {
+  const db = baseDb({
+    handlingRates: [{
+      id: 'hr', customer: 'Acme', currency: 'USD', minimumCharge: 0, monthlyMinimum: 0,
+      rateLines: [
+        { direction: 'IN', vehicle: 'Container', size: '20ft', handlingUom: 'Palletized', rate: 100 },
+        { direction: 'OUT', vehicle: 'Container', size: '20ft', handlingUom: 'Palletized', rate: 150 },
+        { direction: '', vehicle: 'Trailer', size: '40ft', handlingUom: '', rate: 70 }, // wildcard direction + UOM
+        { direction: '', vehicle: 'Loose', size: '', handlingUom: '', rate: 4 },
+      ],
+    }],
+  })
+  const inCont = manualHandlingAmount(db, { customerName: 'Acme', direction: 'IN', handlingMode: 'Container', vehicleType: '20ft', handlingUom: 'Palletized', truckCount: 2 })
+  assert.equal(inCont.rate, 100)
+  assert.equal(inCont.amount, 200) // 2 trucks x 100
+  const outCont = manualHandlingAmount(db, { customerName: 'Acme', direction: 'OUT', handlingMode: 'Container', vehicleType: '20ft', handlingUom: 'Palletized', truckCount: 2 })
+  assert.equal(outCont.amount, 300) // direction OUT -> 2 x 150
+  const trailer = manualHandlingAmount(db, { customerName: 'Acme', direction: 'IN', handlingMode: 'Trailer', vehicleType: '40ft', handlingUom: 'Loose', truckCount: 1 })
+  assert.equal(trailer.amount, 70) // wildcard direction/UOM line matches
+  const loose = manualHandlingAmount(db, { customerName: 'Acme', direction: 'OUT', handlingMode: 'Loose', cbm: 10 })
+  assert.equal(loose.amount, 40) // 10 CBM x 4
+  const noMatch = manualHandlingAmount(db, { customerName: 'Acme', direction: 'IN', handlingMode: 'Container', vehicleType: '40ft', handlingUom: 'Palletized', truckCount: 2 })
+  assert.equal(noMatch.rate, 0) // no 40ft container line
+})
+
 test('activity lines apply per-job minimum charge', () => {
   const db = baseDb({
     unitValues: [{ id: 'uv', customer: 'Acme', activity: 'Picking', uom: 'CTN', unitRate: 0.5, currency: 'USD', minimumCharge: 100, minimumFixedValue: 0 }],

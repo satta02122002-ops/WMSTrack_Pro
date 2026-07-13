@@ -3,16 +3,16 @@ import { useStore } from '../store.jsx'
 import { Modal, Field, Select, StatusBadge, EmptyState } from '../components/ui.jsx'
 import ImportButton from '../components/ImportButton.jsx'
 import QtyLinesEditor, { validQtyLines, qtyLinesTotal } from '../components/QtyLinesEditor.jsx'
-import { fmtDate, fmtNum, num, todayISO, pkgDisplay, storageTypeNames, accountHolderOf, accountHolderNames, customerNames, sameHolder } from '../utils.js'
+import { fmtDate, fmtNum, num, todayISO, uid, pkgDisplay, storageTypeNames, accountHolderOf, accountHolderNames, customerNames, sameHolder, HANDLING_VEHICLES, HANDLING_UOMS } from '../utils.js'
 import { exportXlsx } from '../excel.js'
-import { manualHandlingAmount } from '../billing.js'
+import { manualHandlingAmount, handlingRateLines } from '../billing.js'
 
 function MovementModal({ movement, onClose }) {
   const { db, upsert, toast } = useStore()
   const [m, setM] = useState(() => {
     const base = movement || {
       customer: '', date: todayISO(), reference: '', type: 'Inbound', cbm: '',
-      storage: '', handlingMode: '', containerSize: '', truckCount: '1',
+      storage: '', handlingMode: '', containerSize: '', handlingUom: '', truckCount: '1',
       storageDays: '',
     }
     // Legacy/auto movements have no flag; treat undefined as "bill handling".
@@ -44,6 +44,7 @@ function MovementModal({ movement, onClose }) {
       truckCount: needsVehicle ? num(m.truckCount) : null,
       containerSize: needsVehicle ? m.containerSize : null,
       handlingMode: m.handlingMode || null,
+      handlingUom: m.handlingMode ? (m.handlingUom || null) : null,
       applyHandling: !!m.applyHandling,
       packageLines: cleanPkgs,
       packageQty: cleanPkgs ? qtyLinesTotal(cleanPkgs) : null,
@@ -86,8 +87,13 @@ function MovementModal({ movement, onClose }) {
           <Select value={m.storage} onChange={set('storage')} options={storageTypes} placeholder="Select…" />
         </Field>
         <Field label="Handling Mode">
-          <Select value={m.handlingMode || ''} onChange={set('handlingMode')} options={['Container', 'Trailer', 'Loose']} placeholder="None" />
+          <Select value={m.handlingMode || ''} onChange={set('handlingMode')} options={HANDLING_VEHICLES} placeholder="None" />
         </Field>
+        {m.handlingMode && (
+          <Field label="Handling UOM">
+            <Select value={m.handlingUom || ''} onChange={set('handlingUom')} options={HANDLING_UOMS} placeholder="—" />
+          </Field>
+        )}
         {needsVehicle && (
           <>
             <Field label="Vehicle Type" required>
@@ -127,22 +133,45 @@ function MovementModal({ movement, onClose }) {
 
 export function HandlingRateModal({ rate, onClose }) {
   const { db, upsert, toast } = useStore()
-  const [r, setR] = useState(
-    rate || {
-      customer: '', container20: '', container40: '', trailer20: '', trailer40: '',
-      loosePerCbm: '', minimumCharge: '', monthlyMinimum: '', currency: 'USD', billByCbm: false,
-    },
-  )
-  const setE = (k) => (e) => setR((s) => ({ ...s, [k]: e.target.value }))
-  const valid = r.customer && r.currency
+  const emptyLine = () => ({ id: uid('hrl'), direction: 'Both', vehicle: 'Container', size: '', handlingUom: '', rate: '' })
+  const [r, setR] = useState(() => {
+    const base = rate || { customer: '', minimumCharge: '', monthlyMinimum: '', currency: 'USD', billByCbm: false }
+    // Seed editable lines from the existing card (new rateLines, or legacy fixed fields synthesised into lines).
+    const seeded = handlingRateLines(base).map((l) => ({
+      id: l.id || uid('hrl'),
+      direction: l.direction || 'Both',
+      vehicle: l.vehicle || 'Container',
+      size: l.size || '',
+      handlingUom: l.handlingUom || '',
+      rate: l.rate != null ? String(l.rate) : '',
+    }))
+    return { ...base, lines: seeded.length ? seeded : [emptyLine()] }
+  })
+  const valid = r.customer && r.currency && r.lines.some((l) => l.vehicle && l.rate !== '')
+
+  const setLine = (id, patch) => setR((s) => ({ ...s, lines: s.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) }))
+  const addLine = () => setR((s) => ({ ...s, lines: [...s.lines, emptyLine()] }))
+  const removeLine = (id) => setR((s) => ({ ...s, lines: s.lines.filter((l) => l.id !== id) }))
+
+  const sizeOptions = db.vehicleTypes.map((v) => v.name)
 
   function save() {
+    const rateLines = r.lines
+      .filter((l) => l.vehicle && l.rate !== '')
+      .map((l) => ({
+        id: l.id,
+        direction: l.direction === 'Both' ? '' : l.direction,
+        vehicle: l.vehicle,
+        size: l.size || '',
+        handlingUom: l.handlingUom || '',
+        rate: num(l.rate),
+      }))
     upsert('handlingRates', {
-      ...r,
-      container20: num(r.container20), container40: num(r.container40),
-      trailer20: num(r.trailer20), trailer40: num(r.trailer40),
-      loosePerCbm: num(r.loosePerCbm), minimumCharge: num(r.minimumCharge),
-      monthlyMinimum: num(r.monthlyMinimum), billByCbm: !!r.billByCbm,
+      id: rate?.id,
+      customer: r.customer, currency: r.currency,
+      minimumCharge: num(r.minimumCharge), monthlyMinimum: num(r.monthlyMinimum),
+      billByCbm: !!r.billByCbm,
+      rateLines,
     }, { entityType: 'Master Data', label: 'handling rates' })
     toast('Handling configuration saved')
     onClose()
@@ -167,19 +196,53 @@ export function HandlingRateModal({ rate, onClose }) {
         <Field label="Currency" required>
           <Select value={r.currency} onChange={(v) => setR((s) => ({ ...s, currency: v }))} options={db.currencies.map((c) => c.name)} />
         </Field>
-        <Field label="Container 20ft (per truck)"><input type="number" min="0" step="0.01" value={r.container20} onChange={setE('container20')} /></Field>
-        <Field label="Container 40ft (per truck)"><input type="number" min="0" step="0.01" value={r.container40} onChange={setE('container40')} /></Field>
-        <Field label="Trailer 20ft (per truck)"><input type="number" min="0" step="0.01" value={r.trailer20} onChange={setE('trailer20')} /></Field>
-        <Field label="Trailer 40ft (per truck)"><input type="number" min="0" step="0.01" value={r.trailer40} onChange={setE('trailer40')} /></Field>
-        <Field label="Loose rate (per CBM)"><input type="number" min="0" step="0.01" value={r.loosePerCbm} onChange={setE('loosePerCbm')} /></Field>
-        <Field label="Minimum charge (per movement)"><input type="number" min="0" step="0.01" value={r.minimumCharge} onChange={setE('minimumCharge')} /></Field>
-        <Field label="Monthly minimum charge" hint="Top-up added at billing if month total is below this"><input type="number" min="0" step="0.01" value={r.monthlyMinimum} onChange={setE('monthlyMinimum')} /></Field>
+        <Field label="Minimum charge (per movement)"><input type="number" min="0" step="0.01" value={r.minimumCharge} onChange={(e) => setR((s) => ({ ...s, minimumCharge: e.target.value }))} /></Field>
+        <Field label="Monthly minimum charge" hint="Top-up added at billing if month total is below this"><input type="number" min="0" step="0.01" value={r.monthlyMinimum} onChange={(e) => setR((s) => ({ ...s, monthlyMinimum: e.target.value }))} /></Field>
       </div>
-      <label className="checkbox-row" style={{ marginTop: 4, padding: '10px 12px', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', borderRadius: 8 }}>
+
+      <div className="spread" style={{ margin: '14px 0 8px' }}>
+        <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink-700)', textTransform: 'uppercase', letterSpacing: 0.4, margin: 0 }}>
+          Rate Matrix — one line per Direction · Vehicle · Size · Handling UOM
+        </p>
+        <button className="btn btn-sm btn-outline" onClick={addLine}>＋ Add rate line</button>
+      </div>
+      <div className="table-wrap">
+        <table className="data">
+          <thead>
+            <tr>
+              <th>Direction</th><th>Vehicle</th><th>Size</th><th>Handling UOM</th>
+              <th className="num">Rate</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {r.lines.map((l) => {
+              const isLoose = l.vehicle === 'Loose'
+              return (
+                <tr key={l.id}>
+                  <td><Select value={l.direction} onChange={(v) => setLine(l.id, { direction: v })} options={['Both', 'IN', 'OUT']} /></td>
+                  <td><Select value={l.vehicle} onChange={(v) => setLine(l.id, { vehicle: v })} options={HANDLING_VEHICLES} /></td>
+                  <td><Select value={l.size} onChange={(v) => setLine(l.id, { size: v })} options={sizeOptions} placeholder="Any" /></td>
+                  <td><Select value={l.handlingUom} onChange={(v) => setLine(l.id, { handlingUom: v })} options={HANDLING_UOMS} placeholder="Any" /></td>
+                  <td className="num">
+                    <input type="number" min="0" step="0.01" value={l.rate} onChange={(e) => setLine(l.id, { rate: e.target.value })} style={{ width: 90 }} title={isLoose ? 'Per CBM' : 'Per truck'} />
+                    <div style={{ fontSize: 11, color: 'var(--ink-500)' }}>{isLoose ? 'per CBM' : 'per truck'}</div>
+                  </td>
+                  <td><button className="btn btn-sm btn-danger" onClick={() => removeLine(l.id)} disabled={r.lines.length === 1}>✕</button></td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 8 }}>
+        Leave <b>Direction</b>, <b>Size</b> or <b>Handling UOM</b> blank to match any value. Container/Trailer bill <b>per truck</b>; Loose bills <b>per CBM</b>.
+      </p>
+
+      <label className="checkbox-row" style={{ marginTop: 10, padding: '10px 12px', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', borderRadius: 8 }}>
         <input type="checkbox" checked={!!r.billByCbm} onChange={(e) => setR((s) => ({ ...s, billByCbm: e.target.checked }))} />
         <span>
-          <b>Bill all handling by CBM</b> — charge CBM × loose rate for every movement, even container/trailer.
-          Container and trailer per-truck rates are ignored for this customer; vehicle and truck details are still recorded.
+          <b>Bill all handling by CBM</b> — charge CBM × the Loose rate for every movement, even container/trailer.
+          Per-truck rates are ignored for this customer; vehicle and truck details are still recorded.
         </span>
       </label>
     </Modal>
@@ -189,7 +252,7 @@ export function HandlingRateModal({ rate, onClose }) {
 function ManualHandlingModal({ charge, onClose }) {
   const { db, upsert, toast } = useStore()
   const [h, setH] = useState(
-    charge || { customerName: '', date: todayISO(), reference: '', cbm: '', handlingMode: '', vehicleType: '', truckCount: '1' },
+    charge || { customerName: '', date: todayISO(), reference: '', cbm: '', direction: 'IN', handlingMode: '', vehicleType: '', handlingUom: '', truckCount: '1' },
   )
   const [pkgLines, setPkgLines] = useState(
     charge?.packageLines?.length
@@ -218,8 +281,10 @@ function ManualHandlingModal({ charge, onClose }) {
       ...(charge || {}),
       customerName: h.customerName, date: h.date, reference: (h.reference || '').trim(),
       cbm: num(h.cbm),
+      direction: h.direction || 'IN',
       handlingMode: h.handlingMode,
       vehicleType: needsVehicle ? h.vehicleType : null,
+      handlingUom: h.handlingUom || null,
       truckCount: needsVehicle ? num(h.truckCount) : null,
       packageLines: cleanPkgs,
       packageQty: qtyLinesTotal(cleanPkgs),
@@ -252,11 +317,17 @@ function ManualHandlingModal({ charge, onClose }) {
         <Field label="Reference">
           <input type="text" value={h.reference} onChange={setE('reference')} placeholder="e.g. PO / job ref" />
         </Field>
+        <Field label="Direction" required>
+          <Select value={h.direction} onChange={set('direction')} options={['IN', 'OUT']} />
+        </Field>
         <Field label="CBM" required>
           <input type="number" min="0" step="0.01" value={h.cbm} onChange={setE('cbm')} />
         </Field>
         <Field label="Handling Type" required>
-          <Select value={h.handlingMode} onChange={set('handlingMode')} options={['Container', 'Trailer', 'Loose']} placeholder="Select handling…" />
+          <Select value={h.handlingMode} onChange={set('handlingMode')} options={HANDLING_VEHICLES} placeholder="Select handling…" />
+        </Field>
+        <Field label="Handling UOM">
+          <Select value={h.handlingUom || ''} onChange={set('handlingUom')} options={HANDLING_UOMS} placeholder="—" />
         </Field>
         {needsVehicle && (
           <>
@@ -339,6 +410,7 @@ export default function StorageHandling() {
         customer: String(row.customer), date: String(row.date).slice(0, 10), reference: String(row.reference || ''),
         type: /out/i.test(row.type) ? 'Outbound' : 'Inbound', cbm: num(row.cbm), storage: String(row.storage || 'Normal Storage'),
         handlingMode: row.handlingMode || null, containerSize: row.containerSize || null,
+        handlingUom: row.handlingUom || null,
         truckCount: row.truckCount === '' ? null : num(row.truckCount),
         packageQty: row.packageQty === '' ? null : num(row.packageQty), packageUom: row.packageUom || null,
         storageDays: row.storageDays === '' ? null : num(row.storageDays), sourceActivityId: null,
@@ -357,12 +429,16 @@ export default function StorageHandling() {
       const modeRaw = String(row.handling || row.handlingMode || '').trim().toLowerCase()
       const handlingMode = modeRaw.startsWith('cont') ? 'Container' : modeRaw.startsWith('trail') ? 'Trailer' : 'Loose'
       const needsVehicle = handlingMode !== 'Loose'
+      const dirRaw = String(row.direction || row.handlingType || 'IN').trim().toUpperCase()
+      const uomRaw = String(row.handlingUom || '').trim().toLowerCase()
       upsert('handlingCharges', {
         customerName: String(row.customer), date: String(row.date).slice(0, 10),
         reference: String(row.reference || ''),
         cbm: num(row.cbm),
+        direction: dirRaw === 'OUT' ? 'OUT' : 'IN',
         handlingMode,
         vehicleType: needsVehicle ? String(row.vehicle || row.vehicleType || '') : null,
+        handlingUom: uomRaw.startsWith('pall') ? 'Palletized' : uomRaw.startsWith('loose') ? 'Loose' : null,
         truckCount: needsVehicle ? num(row.trucks ?? row.truckCount, 1) : null,
         packageQty: row.packageQty === '' || row.packageQty == null ? null : num(row.packageQty),
         packageUom: row.packageUom || '',
@@ -379,6 +455,7 @@ export default function StorageHandling() {
       movements.map((m) => ({
         Date: m.date, Customer: m.customer, Reference: m.reference, Type: m.type,
         CBM: m.cbm, Storage: m.storage, Handling: m.handlingMode || '', Vehicle: m.containerSize || '',
+        'Handling UOM': m.handlingUom || '',
         Trucks: m.truckCount || '', 'Package Qty': m.packageLines?.length > 1 ? pkgDisplay(m) : m.packageQty || '',
         'Package UOM': m.packageLines?.length > 1 ? 'Multi' : m.packageUom || '',
         'Storage Days': m.storageDays ?? 'auto',
@@ -394,8 +471,8 @@ export default function StorageHandling() {
       manualCharges.map((h) => {
         const calc = manualHandlingAmount(db, h)
         return {
-          Date: h.date, Customer: h.customerName, Reference: h.reference || '',
-          CBM: h.cbm, Handling: h.handlingMode || 'Loose', Vehicle: h.vehicleType || '', Trucks: h.truckCount || '',
+          Date: h.date, Customer: h.customerName, Reference: h.reference || '', Direction: h.direction || 'IN',
+          CBM: h.cbm, Handling: h.handlingMode || 'Loose', Vehicle: h.vehicleType || '', 'Handling UOM': h.handlingUom || '', Trucks: h.truckCount || '',
           'Package Qty': h.packageLines?.length > 1 ? pkgDisplay(h) : h.packageQty ?? '',
           'Package UOM': h.packageLines?.length > 1 ? 'Multi' : h.packageUom || '',
           Rate: calc.rate, Total: calc.amount, Currency: calc.currency,
@@ -491,8 +568,8 @@ export default function StorageHandling() {
               <table className="data">
                 <thead>
                   <tr>
-                    <th>Date</th><th>Customer</th><th>Reference</th>
-                    <th className="num">CBM</th><th>Handling</th><th>Vehicle</th><th className="num">Trucks</th>
+                    <th>Date</th><th>Customer</th><th>Reference</th><th>Dir</th>
+                    <th className="num">CBM</th><th>Handling</th><th>Vehicle</th><th>Hdl UOM</th><th className="num">Trucks</th>
                     <th className="num">Pkg Qty</th><th>Pkg UOM</th>
                     <th className="num">Rate</th><th className="num">Total</th><th>Currency</th><th></th>
                   </tr>
@@ -505,9 +582,11 @@ export default function StorageHandling() {
                         <td>{fmtDate(h.date)}</td>
                         <td><b>{h.customerName}</b></td>
                         <td>{h.reference || '—'}</td>
+                        <td>{h.direction || 'IN'}</td>
                         <td className="num">{fmtNum(h.cbm)}</td>
                         <td>{h.handlingMode || 'Loose'}</td>
                         <td>{h.vehicleType || '—'}</td>
+                        <td>{h.handlingUom || '—'}</td>
                         <td className="num">{h.truckCount ?? '—'}</td>
                         <td className="num" style={{ whiteSpace: 'nowrap' }}>{pkgDisplay(h)}</td>
                         <td>{h.packageLines?.length > 1 ? <span className="badge badge-blue">MULTI</span> : h.packageUom || '—'}</td>

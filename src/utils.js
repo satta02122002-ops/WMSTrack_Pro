@@ -86,6 +86,11 @@ export function passwordPolicyError(password) {
 
 export const DEFAULT_STORAGE_TYPES = ['Normal Storage', 'Cold Storage', 'Bonded Storage']
 
+// Handling vehicle categories and the way cargo is handled (used by handling rates/entry).
+export const HANDLING_VEHICLES = ['Container', 'Trailer', 'Loose']
+export const HANDLING_UOMS = ['Palletized', 'Loose']
+export const HANDLING_DIRECTIONS = ['IN', 'OUT']
+
 // Account holders (customer account managers). Names are matched
 // case-insensitively (and trimmed) because customers can be imported from Excel
 // with a different casing/spacing than the managed Parameter list — e.g. a

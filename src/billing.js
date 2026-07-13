@@ -19,34 +19,84 @@ function addDaysIso(iso, n) {
  *
  * Line ids are stable so billed status survives recomputation.
  */
+const hNorm = (s) => String(s || '').trim().toLowerCase()
+
 /**
- * Price a manual handling charge from Master Data. The user only enters CBM
- * (plus package info); the rate, minimum and currency come from the customer's
- * configured handling rate (loose per-CBM basis). Returns zero when the
- * customer has no handling rate configured.
+ * A customer's handling rate is a matrix of rate lines, each keyed by direction
+ * (IN/OUT/Both), vehicle (Container/Trailer/Loose), size (20ft/40ft/3-ton…) and
+ * handling UOM (Palletized/Loose). Older rate cards stored fixed fields instead;
+ * they are synthesised into equivalent lines so existing configs keep working.
  */
-export function manualHandlingAmount(db, h) {
-  const hr = (db.handlingRates || []).find((r) => r.customer === h.customerName)
-  // Mirror the operations-execution handling pricing: Container/Trailer bill per
-  // truck at the vehicle-size rate, Loose (or billByCbm customers) bill CBM x
-  // loose rate. Legacy manual charges have no handlingMode -> treated as Loose.
-  const mode = h.handlingMode || 'Loose'
-  const cbmBasis = hr?.billByCbm || mode !== 'Container' && mode !== 'Trailer'
-  let rate = 0
-  let raw = 0
-  if (cbmBasis) {
-    rate = hr ? num(hr.loosePerCbm) : 0
-    raw = round2(num(h.cbm) * rate)
-  } else {
-    const is40 = String(h.vehicleType || '').includes('40')
-    if (mode === 'Container') rate = hr ? num(is40 ? hr.container40 : hr.container20) : 0
-    else rate = hr ? num(is40 ? hr.trailer40 : hr.trailer20) : 0
-    raw = round2(num(h.truckCount) * rate)
+export function handlingRateLines(hr) {
+  if (Array.isArray(hr?.rateLines)) return hr.rateLines
+  const L = []
+  if (num(hr?.container20)) L.push({ vehicle: 'Container', size: '20ft', rate: num(hr.container20) })
+  if (num(hr?.container40)) L.push({ vehicle: 'Container', size: '40ft', rate: num(hr.container40) })
+  if (num(hr?.trailer20)) L.push({ vehicle: 'Trailer', size: '20ft', rate: num(hr.trailer20) })
+  if (num(hr?.trailer40)) L.push({ vehicle: 'Trailer', size: '40ft', rate: num(hr.trailer40) })
+  if (num(hr?.loosePerCbm)) L.push({ vehicle: 'Loose', rate: num(hr.loosePerCbm) })
+  return L
+}
+
+/**
+ * Best-matching rate line for a handling event. A blank field on a line is a
+ * wildcard; a set field must match. More-specific matches (direction > size >
+ * handling UOM) win, so a general fallback line can coexist with exact rows.
+ */
+function bestHandlingLine(lines, ev) {
+  let best = null, bestScore = -1
+  for (const l of lines) {
+    let score = 0
+    if (l.direction && hNorm(l.direction) !== 'both') {
+      if (hNorm(l.direction) !== hNorm(ev.direction)) continue
+      score += 4
+    }
+    if (l.size) {
+      if (hNorm(l.size) !== hNorm(ev.size)) continue
+      score += 2
+    }
+    if (l.handlingUom) {
+      if (hNorm(l.handlingUom) !== hNorm(ev.handlingUom)) continue
+      score += 1
+    }
+    if (score > bestScore) { best = l; bestScore = score }
   }
+  return best
+}
+
+/**
+ * Resolve and compute a handling charge for a single event, from Master Data.
+ * Container/Trailer bill per truck at the matched rate; Loose (and billByCbm
+ * customers) bill CBM × the loose rate. The customer's minimum charge applies.
+ * `ev`: { customer, direction, vehicle, size, handlingUom, trucks, cbm }.
+ */
+export function handlingChargeFor(db, ev) {
+  const hr = (db.handlingRates || []).find((r) => r.customer === ev.customer)
+  const vehicle = hNorm(ev.vehicle) || 'loose'
+  const perCbm = !!hr?.billByCbm || vehicle === 'loose'
+  const lines = handlingRateLines(hr).filter((l) => hNorm(l.vehicle) === (perCbm ? 'loose' : vehicle))
+  const line = bestHandlingLine(lines, ev)
+  const rate = line ? num(line.rate) : 0
+  const raw = perCbm ? round2(num(ev.cbm) * rate) : round2(num(ev.trucks) * rate)
   const minCharge = hr ? num(hr.minimumCharge) : 0
   const amount = Math.max(raw, minCharge)
-  const currency = hr?.currency || (db.customers || []).find((c) => c.name === h.customerName)?.currency || ''
-  return { rate, amount, minimumApplied: amount > raw, currency, rateMissing: !hr, mode, cbmBasis: cbmBasis && mode !== 'Loose' }
+  const currency = hr?.currency || (db.customers || []).find((c) => c.name === ev.customer)?.currency || ''
+  return { rate, amount, minimumApplied: amount > raw, currency, rateMissing: !hr, perCbm, cbmBasis: perCbm && vehicle !== 'loose' }
+}
+
+/**
+ * Price a manual handling charge from Master Data, mirroring operations-execution
+ * handling. The user picks direction, vehicle, size, handling UOM and trucks/CBM;
+ * rate, minimum and currency come from the customer's handling configuration.
+ * Legacy manual charges have no handlingMode -> treated as Loose.
+ */
+export function manualHandlingAmount(db, h) {
+  const mode = h.handlingMode || 'Loose'
+  const r = handlingChargeFor(db, {
+    customer: h.customerName, direction: h.direction, vehicle: mode,
+    size: h.vehicleType, handlingUom: h.handlingUom, trucks: h.truckCount, cbm: h.cbm,
+  })
+  return { ...r, mode }
 }
 
 export function computeBillingLines(db, period) {
@@ -164,36 +214,23 @@ export function computeBillingLines(db, period) {
     // movements only when "Add Handling Charges" was ticked (applyHandling).
     // Legacy movements have no flag, so undefined is treated as apply.
     if (m.handlingMode && m.applyHandling !== false) {
-      const hr = db.handlingRates.find((r) => r.customer === m.customer)
-      // Customers flagged billByCbm are always charged CBM x rate, even when the
-      // cargo moved by container/trailer (the operational details are still kept).
-      const cbmBasis = hr?.billByCbm || m.handlingMode === 'Loose'
-      let rate = 0
-      let amount = 0
-      if (cbmBasis) {
-        rate = hr ? num(hr.loosePerCbm) : 0
-        amount = round2(num(m.cbm) * rate)
-      } else {
-        const is40 = String(m.containerSize || '').includes('40')
-        if (m.handlingMode === 'Container') rate = hr ? num(is40 ? hr.container40 : hr.container20) : 0
-        else rate = hr ? num(is40 ? hr.trailer40 : hr.trailer20) : 0
-        amount = round2(num(m.truckCount) * rate)
-      }
-      const minCharge = hr ? num(hr.minimumCharge) : 0
-      const finalAmount = Math.max(amount, minCharge)
+      const { rate, amount: finalAmount, minimumApplied, currency, rateMissing, cbmBasis } = handlingChargeFor(db, {
+        customer: m.customer, direction: inbound ? 'IN' : 'OUT', vehicle: m.handlingMode,
+        size: m.containerSize, handlingUom: m.handlingUom, trucks: m.truckCount, cbm: m.cbm,
+      })
       handlingTotals.set(m.customer, round2((handlingTotals.get(m.customer) || 0) + finalAmount))
       lines.push({
         id: `han:${m.id}`,
         source: 'handling', reportType: 'Handling',
         customerName: m.customer, date: m.date, customerRef: m.reference,
         activity: `Handling ${inbound ? 'In' : 'Out'} ${m.handlingMode}`,
-        handlingType: m.handlingMode, vehicleType: m.containerSize || '',
+        handlingType: m.handlingMode, vehicleType: m.containerSize || '', handlingUom: m.handlingUom || '',
         truckCount: m.truckCount || '',
         cbmQty: num(m.cbm), packageQty: m.packageQty || '', packageUom: pkgUom, packageDetail: pkgDetail,
-        currency: hr?.currency || cur,
+        currency: currency || cur,
         combinedRate: rate, totalValue: finalAmount,
-        minimumApplied: finalAmount > amount, rateMissing: !hr,
-        cbmBasis: cbmBasis && m.handlingMode !== 'Loose',
+        minimumApplied, rateMissing,
+        cbmBasis,
       })
     }
   }
@@ -231,7 +268,7 @@ export function computeBillingLines(db, period) {
       source: 'handling', reportType: 'Handling',
       customerName: h.customerName, date: h.date, customerRef: h.reference || '—',
       activity: `Manual Handling ${mode}`,
-      handlingType: mode, vehicleType: h.vehicleType || '', truckCount: h.truckCount || '',
+      handlingType: mode, vehicleType: h.vehicleType || '', handlingUom: h.handlingUom || '', truckCount: h.truckCount || '',
       cbmQty: num(h.cbm), packageQty: h.packageQty || '',
       packageUom: multiPkg ? 'Multi' : h.packageUom || '',
       packageDetail: multiPkg ? h.packageLines.map((l) => `${l.qty} ${l.uom}`).join(' + ') : null,
