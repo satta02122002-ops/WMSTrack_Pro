@@ -6,7 +6,7 @@ import {
 import { Bar, Line, Pie, Doughnut, Bubble, Radar } from 'react-chartjs-2'
 import { useStore } from '../store.jsx'
 import { KPI, EmptyState, Select, Field } from '../components/ui.jsx'
-import { fmtNum, num, round2, todayISO, toISODate, monthKey, accountHolderOf, accountHolderNames } from '../utils.js'
+import { fmtNum, num, round2, todayISO, toISODate, monthKey, accountHolderOf, accountHolderNames, customerNames } from '../utils.js'
 import { computeBillingLines } from '../billing.js'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement, RadialLinearScale, Tooltip, Legend, Filler)
@@ -175,8 +175,8 @@ export default function Analytics() {
           <div className="form-grid" style={{ marginBottom: 10 }}>
             <Field label="From"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
             <Field label="To"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
-            <Field label="Customer"><Select value={customerFilter} onChange={setCustomerFilter} options={db.customers.map((c) => c.name)} placeholder="All customers" /></Field>
-            <Field label="Account Holder"><Select value={accountHolderFilter} onChange={setAccountHolderFilter} options={accountHolderNames(db)} placeholder="All account holders" /></Field>
+            <Field label="Customer"><Select value={customerFilter} onChange={setCustomerFilter} options={customerNames(db, accountHolderFilter)} placeholder="All customers" /></Field>
+            <Field label="Account Holder"><Select value={accountHolderFilter} onChange={(v) => { setAccountHolderFilter(v); if (v && accountHolderOf(db, customerFilter) !== v) setCustomerFilter('') }} options={accountHolderNames(db)} placeholder="All account holders" /></Field>
             <Field label="Activity"><Select value={activityFilter} onChange={setActivityFilter} options={db.activitiesMaster.map((a) => a.name)} placeholder="All activities" /></Field>
           </div>
           <EmptyState icon="📊" title="No data in this date range" hint="Complete some activities or widen the range." />
@@ -196,8 +196,8 @@ export default function Analytics() {
         <div className="form-grid">
           <Field label="From"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
           <Field label="To"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
-          <Field label="Customer"><Select value={customerFilter} onChange={setCustomerFilter} options={db.customers.map((c) => c.name)} placeholder="All customers" /></Field>
-          <Field label="Account Holder"><Select value={accountHolderFilter} onChange={setAccountHolderFilter} options={accountHolderNames(db)} placeholder="All account holders" /></Field>
+          <Field label="Customer"><Select value={customerFilter} onChange={setCustomerFilter} options={customerNames(db, accountHolderFilter)} placeholder="All customers" /></Field>
+          <Field label="Account Holder"><Select value={accountHolderFilter} onChange={(v) => { setAccountHolderFilter(v); if (v && accountHolderOf(db, customerFilter) !== v) setCustomerFilter('') }} options={accountHolderNames(db)} placeholder="All account holders" /></Field>
           <Field label="Activity"><Select value={activityFilter} onChange={setActivityFilter} options={db.activitiesMaster.map((a) => a.name)} placeholder="All activities" /></Field>
         </div>
       </div>

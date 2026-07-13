@@ -97,6 +97,17 @@ export function accountHolderOf(db, customerName) {
 }
 
 /**
+ * Customer names for a dropdown, optionally narrowed to a single account holder.
+ * When an account holder is selected the list contains only that holder's
+ * customers (Master Data assignment); with no holder it is every customer.
+ */
+export function customerNames(db, accountHolder = '') {
+  return (db.customers || [])
+    .filter((c) => !accountHolder || c.accountHolder === accountHolder)
+    .map((c) => c.name)
+}
+
+/**
  * Storage-type options for dropdowns: the managed Parameter list, unioned with
  * any types already used on storage rates, falling back to the defaults so the
  * app keeps working before the list is set up.

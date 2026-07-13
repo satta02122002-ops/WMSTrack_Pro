@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { round2, num, daysToMonthEnd, storageTypeNames, accountHolderNames, accountHolderOf } from '../src/utils.js'
+import { round2, num, daysToMonthEnd, storageTypeNames, accountHolderNames, accountHolderOf, customerNames } from '../src/utils.js'
 import { monthsInRange } from '../src/billing.js'
 
 test('round2 rounds to two decimals', () => {
@@ -47,6 +47,22 @@ test('account holder helpers resolve names and per-customer holder', () => {
   assert.equal(accountHolderOf(db, 'Gulf'), '') // no holder assigned
   assert.equal(accountHolderOf(db, 'Unknown'), '')
   assert.deepEqual(accountHolderNames({}), []) // legacy db without the key
+})
+
+test('customerNames cascades to a selected account holder', () => {
+  const db = {
+    customers: [
+      { id: 'c1', name: 'Acme', accountHolder: 'Jane' },
+      { id: 'c2', name: 'Gulf', accountHolder: 'Omar' },
+      { id: 'c3', name: 'Nile', accountHolder: 'Jane' },
+      { id: 'c4', name: 'Orphan' },
+    ],
+  }
+  assert.deepEqual(customerNames(db), ['Acme', 'Gulf', 'Nile', 'Orphan']) // no holder: all
+  assert.deepEqual(customerNames(db, 'Jane'), ['Acme', 'Nile']) // only Jane's customers
+  assert.deepEqual(customerNames(db, 'Omar'), ['Gulf'])
+  assert.deepEqual(customerNames(db, 'Nobody'), []) // holder with no customers
+  assert.deepEqual(customerNames({}), []) // legacy db without customers
 })
 
 test('monthsInRange enumerates months inclusively', () => {

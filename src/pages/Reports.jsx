@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../store.jsx'
 import { Select, EmptyState, StatusBadge } from '../components/ui.jsx'
-import { fmtDate, fmtDuration, fmtNum, num, round2, todayISO, qtyDisplay, monthKey, firstOfMonthISO, accountHolderOf, accountHolderNames } from '../utils.js'
+import { fmtDate, fmtDuration, fmtNum, num, round2, todayISO, qtyDisplay, monthKey, firstOfMonthISO, accountHolderOf, accountHolderNames, customerNames } from '../utils.js'
 import { exportXlsx, exportCsv } from '../excel.js'
 import { computeBillingLines } from '../billing.js'
 import { ManualActivityModal } from './OperationsMonitor.jsx'
@@ -96,8 +96,8 @@ export default function Reports() {
           <div className="row">
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-            <Select value={customer} onChange={setCustomer} options={db.customers.map((c) => c.name)} placeholder="All customers" style={{ width: 190 }} />
-            <Select value={accountHolder} onChange={setAccountHolder} options={accountHolderNames(db)} placeholder="All account holders" style={{ width: 190 }} />
+            <Select value={customer} onChange={setCustomer} options={customerNames(db, accountHolder)} placeholder="All customers" style={{ width: 190 }} />
+            <Select value={accountHolder} onChange={(v) => { setAccountHolder(v); if (v && accountHolderOf(db, customer) !== v) setCustomer('') }} options={accountHolderNames(db)} placeholder="All account holders" style={{ width: 190 }} />
           </div>
           <div className="row">
             <button className="btn btn-sm btn-outline" onClick={() => doExport('xlsx')}>⬇ Excel</button>
