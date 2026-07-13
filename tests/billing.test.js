@@ -52,11 +52,30 @@ test('manual handling is priced from Master Data with minimum applied', () => {
       { id: 'h2', customerName: 'Acme', date: '2026-07-06', reference: 'J2', cbm: 5, packageQty: 1, packageUom: 'CTN' },
     ],
   })
-  assert.equal(manualHandlingAmount(db, db.handlingCharges[0]).amount, 87.5) // 25 * 3.5
+  assert.equal(manualHandlingAmount(db, db.handlingCharges[0]).amount, 87.5) // 25 * 3.5 (legacy = Loose)
   const h2 = manualHandlingAmount(db, db.handlingCharges[1])
   assert.equal(h2.amount, 50) // 5*3.5=17.5 -> min 50
   assert.equal(h2.minimumApplied, true)
   assert.equal(manualHandlingAmount({ ...db, handlingRates: [] }, db.handlingCharges[0]).rateMissing, true)
+})
+
+test('manual handling prices Container/Trailer per truck like operations execution', () => {
+  const db = baseDb({
+    handlingRates: [{ id: 'hr', customer: 'Acme', loosePerCbm: 3.5, minimumCharge: 0, monthlyMinimum: 0, currency: 'USD', container20: 50, container40: 80, trailer20: 40, trailer40: 60 }],
+  })
+  // Container 40ft x 2 trucks = 2 * 80
+  const cont = manualHandlingAmount(db, { customerName: 'Acme', cbm: 10, handlingMode: 'Container', vehicleType: '40ft', truckCount: 2 })
+  assert.equal(cont.rate, 80)
+  assert.equal(cont.amount, 160)
+  // Trailer 20ft x 3 trucks = 3 * 40
+  const trail = manualHandlingAmount(db, { customerName: 'Acme', cbm: 10, handlingMode: 'Trailer', vehicleType: '20ft', truckCount: 3 })
+  assert.equal(trail.amount, 120)
+  // Loose still bills by CBM
+  const loose = manualHandlingAmount(db, { customerName: 'Acme', cbm: 10, handlingMode: 'Loose' })
+  assert.equal(loose.amount, 35) // 10 * 3.5
+  // billByCbm customer bills Container by CBM instead of per truck
+  const cbmDb = baseDb({ handlingRates: [{ ...db.handlingRates[0], billByCbm: true }] })
+  assert.equal(manualHandlingAmount(cbmDb, { customerName: 'Acme', cbm: 10, handlingMode: 'Container', vehicleType: '40ft', truckCount: 2 }).amount, 35)
 })
 
 test('activity lines apply per-job minimum charge', () => {

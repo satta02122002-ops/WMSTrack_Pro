@@ -27,12 +27,26 @@ function addDaysIso(iso, n) {
  */
 export function manualHandlingAmount(db, h) {
   const hr = (db.handlingRates || []).find((r) => r.customer === h.customerName)
-  const rate = hr ? num(hr.loosePerCbm) : 0
-  const raw = round2(num(h.cbm) * rate)
+  // Mirror the operations-execution handling pricing: Container/Trailer bill per
+  // truck at the vehicle-size rate, Loose (or billByCbm customers) bill CBM x
+  // loose rate. Legacy manual charges have no handlingMode -> treated as Loose.
+  const mode = h.handlingMode || 'Loose'
+  const cbmBasis = hr?.billByCbm || mode !== 'Container' && mode !== 'Trailer'
+  let rate = 0
+  let raw = 0
+  if (cbmBasis) {
+    rate = hr ? num(hr.loosePerCbm) : 0
+    raw = round2(num(h.cbm) * rate)
+  } else {
+    const is40 = String(h.vehicleType || '').includes('40')
+    if (mode === 'Container') rate = hr ? num(is40 ? hr.container40 : hr.container20) : 0
+    else rate = hr ? num(is40 ? hr.trailer40 : hr.trailer20) : 0
+    raw = round2(num(h.truckCount) * rate)
+  }
   const minCharge = hr ? num(hr.minimumCharge) : 0
   const amount = Math.max(raw, minCharge)
   const currency = hr?.currency || (db.customers || []).find((c) => c.name === h.customerName)?.currency || ''
-  return { rate, amount, minimumApplied: amount > raw, currency, rateMissing: !hr }
+  return { rate, amount, minimumApplied: amount > raw, currency, rateMissing: !hr, mode, cbmBasis: cbmBasis && mode !== 'Loose' }
 }
 
 export function computeBillingLines(db, period) {
@@ -209,18 +223,21 @@ export function computeBillingLines(db, period) {
   // counted toward the customer's handling total so monthly-minimum top-ups
   // account for them.
   for (const h of (db.handlingCharges || []).filter((h) => inPeriod(h.date))) {
-    const { rate, amount, minimumApplied, currency, rateMissing } = manualHandlingAmount(db, h)
+    const { rate, amount, minimumApplied, currency, rateMissing, mode, cbmBasis } = manualHandlingAmount(db, h)
     handlingTotals.set(h.customerName, round2((handlingTotals.get(h.customerName) || 0) + amount))
+    const multiPkg = Array.isArray(h.packageLines) && h.packageLines.length > 1
     lines.push({
       id: `manhan:${h.id}`,
       source: 'handling', reportType: 'Handling',
       customerName: h.customerName, date: h.date, customerRef: h.reference || '—',
-      activity: 'Manual Handling',
-      handlingType: 'Manual', vehicleType: '', truckCount: '',
-      cbmQty: num(h.cbm), packageQty: h.packageQty || '', packageUom: h.packageUom || '',
+      activity: `Manual Handling ${mode}`,
+      handlingType: mode, vehicleType: h.vehicleType || '', truckCount: h.truckCount || '',
+      cbmQty: num(h.cbm), packageQty: h.packageQty || '',
+      packageUom: multiPkg ? 'Multi' : h.packageUom || '',
+      packageDetail: multiPkg ? h.packageLines.map((l) => `${l.qty} ${l.uom}`).join(' + ') : null,
       currency,
       combinedRate: rate, totalValue: amount,
-      minimumApplied, rateMissing,
+      minimumApplied, rateMissing, cbmBasis,
     })
   }
 

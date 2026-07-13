@@ -189,20 +189,41 @@ export function HandlingRateModal({ rate, onClose }) {
 function ManualHandlingModal({ charge, onClose }) {
   const { db, upsert, toast } = useStore()
   const [h, setH] = useState(
-    charge || { customerName: '', date: todayISO(), reference: '', cbm: '', packageQty: '', packageUom: '' },
+    charge || { customerName: '', date: todayISO(), reference: '', cbm: '', handlingMode: '', vehicleType: '', truckCount: '1' },
+  )
+  const [pkgLines, setPkgLines] = useState(
+    charge?.packageLines?.length
+      ? charge.packageLines.map((l) => ({ qty: String(l.qty), uom: l.uom }))
+      : charge?.packageQty != null && charge?.packageQty !== ''
+        ? [{ qty: String(charge.packageQty), uom: charge.packageUom || '' }]
+        : [{ qty: '', uom: '' }],
   )
   const set = (k) => (v) => setH((s) => ({ ...s, [k]: v }))
   const setE = (k) => (e) => setH((s) => ({ ...s, [k]: e.target.value }))
-  const valid = h.customerName && h.date && num(h.cbm) > 0 && num(h.packageQty) > 0 && h.packageUom
+
+  const needsVehicle = h.handlingMode === 'Container' || h.handlingMode === 'Trailer'
+  const valid = h.customerName && h.date && num(h.cbm) > 0 && h.handlingMode &&
+    (h.handlingMode === 'Loose' || (h.vehicleType && num(h.truckCount) > 0)) &&
+    validQtyLines(pkgLines)
 
   const hasRate = h.customerName && db.handlingRates.some((r) => r.customer === h.customerName)
-  const preview = h.customerName && num(h.cbm) > 0 ? manualHandlingAmount(db, { ...h, cbm: num(h.cbm) }) : null
+  const preview = h.customerName && h.handlingMode && num(h.cbm) > 0
+    ? manualHandlingAmount(db, { ...h, cbm: num(h.cbm), truckCount: num(h.truckCount) })
+    : null
 
   function save() {
     const cust = db.customers.find((c) => c.name === h.customerName)
+    const cleanPkgs = pkgLines.map((l) => ({ qty: num(l.qty), uom: l.uom }))
     upsert('handlingCharges', {
+      ...(charge || {}),
       customerName: h.customerName, date: h.date, reference: (h.reference || '').trim(),
-      cbm: num(h.cbm), packageQty: num(h.packageQty), packageUom: h.packageUom,
+      cbm: num(h.cbm),
+      handlingMode: h.handlingMode,
+      vehicleType: needsVehicle ? h.vehicleType : null,
+      truckCount: needsVehicle ? num(h.truckCount) : null,
+      packageLines: cleanPkgs,
+      packageQty: qtyLinesTotal(cleanPkgs),
+      packageUom: cleanPkgs.length === 1 ? cleanPkgs[0].uom : null,
       currency: cust?.currency || '',
     }, { entityType: 'Handling', label: 'manual handling charge' })
     toast('Manual handling charge saved')
@@ -234,13 +255,31 @@ function ManualHandlingModal({ charge, onClose }) {
         <Field label="CBM" required>
           <input type="number" min="0" step="0.01" value={h.cbm} onChange={setE('cbm')} />
         </Field>
-        <Field label="Package Qty" required>
-          <input type="number" min="0" step="0.01" value={h.packageQty} onChange={setE('packageQty')} />
+        <Field label="Handling Type" required>
+          <Select value={h.handlingMode} onChange={set('handlingMode')} options={['Container', 'Trailer', 'Loose']} placeholder="Select handling…" />
         </Field>
-        <Field label="Package UOM" required>
-          <Select value={h.packageUom} onChange={set('packageUom')} options={db.uoms.map((u) => u.name)} placeholder="Select…" />
-        </Field>
+        {needsVehicle && (
+          <>
+            <Field label="Vehicle Type" required>
+              <Select value={h.vehicleType || ''} onChange={set('vehicleType')} options={db.vehicleTypes.map((v) => v.name)} placeholder="Select vehicle…" />
+            </Field>
+            <Field label="No. of Trucks" required>
+              <input type="number" min="1" step="1" value={h.truckCount ?? ''} onChange={setE('truckCount')} />
+            </Field>
+          </>
+        )}
       </div>
+      <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink-700)', textTransform: 'uppercase', letterSpacing: 0.4, margin: '10px 0 8px' }}>
+        Packages — add a line per UOM (e.g. 1 PLT + 10 CTN + 600 PCS)
+      </p>
+      <QtyLinesEditor
+        lines={pkgLines}
+        onChange={setPkgLines}
+        uoms={db.uoms.map((u) => u.name)}
+        qtyLabel="Package Qty"
+        uomLabel="Package UOM"
+        totalLabel="Total packages"
+      />
       {h.customerName && !hasRate && (
         <div style={{ marginTop: 4, padding: '10px 12px', background: 'var(--red-50, #fef2f2)', border: '1px solid #fecaca', borderRadius: 8, fontSize: 13, color: 'var(--red-600)' }}>
           ⚠ No handling rate is configured for <b>{h.customerName}</b> in Master Data. Add one under Master Data → Handling Rates, or the charge will be 0.
@@ -248,10 +287,14 @@ function ManualHandlingModal({ charge, onClose }) {
       )}
       {preview && hasRate && (
         <div style={{ marginTop: 4, padding: '10px 12px', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', borderRadius: 8, fontSize: 13 }}>
-          Rate <b>{fmtNum(preview.rate)}</b> / CBM × <b>{fmtNum(num(h.cbm))}</b> CBM ={' '}
+          {preview.cbmBasis || h.handlingMode === 'Loose' ? (
+            <>Rate <b>{fmtNum(preview.rate)}</b> / CBM × <b>{fmtNum(num(h.cbm))}</b> CBM = </>
+          ) : (
+            <>Rate <b>{fmtNum(preview.rate)}</b> / truck × <b>{num(h.truckCount)}</b> truck(s) = </>
+          )}
           <b>{fmtNum(preview.amount)} {preview.currency}</b>
           {preview.minimumApplied && <span style={{ color: 'var(--ink-500)' }}> (minimum charge applied)</span>}
-          <div style={{ color: 'var(--ink-500)', marginTop: 2 }}>Rate, minimum and currency come from Master Data handling configuration.</div>
+          <div style={{ color: 'var(--ink-500)', marginTop: 2 }}>Rate, minimum and currency come from Master Data handling configuration — same as Operations Execution.</div>
         </div>
       )}
     </Modal>
@@ -311,10 +354,16 @@ export default function StorageHandling() {
     for (const row of rows) {
       if (!row.customer || !row.date || !num(row.cbm)) { skipped++; continue }
       const cust = db.customers.find((c) => c.name === String(row.customer))
+      const modeRaw = String(row.handling || row.handlingMode || '').trim().toLowerCase()
+      const handlingMode = modeRaw.startsWith('cont') ? 'Container' : modeRaw.startsWith('trail') ? 'Trailer' : 'Loose'
+      const needsVehicle = handlingMode !== 'Loose'
       upsert('handlingCharges', {
         customerName: String(row.customer), date: String(row.date).slice(0, 10),
         reference: String(row.reference || ''),
         cbm: num(row.cbm),
+        handlingMode,
+        vehicleType: needsVehicle ? String(row.vehicle || row.vehicleType || '') : null,
+        truckCount: needsVehicle ? num(row.trucks ?? row.truckCount, 1) : null,
         packageQty: row.packageQty === '' || row.packageQty == null ? null : num(row.packageQty),
         packageUom: row.packageUom || '',
         currency: cust?.currency || '',
@@ -346,8 +395,10 @@ export default function StorageHandling() {
         const calc = manualHandlingAmount(db, h)
         return {
           Date: h.date, Customer: h.customerName, Reference: h.reference || '',
-          CBM: h.cbm, 'Package Qty': h.packageQty ?? '', 'Package UOM': h.packageUom || '',
-          'Rate/CBM': calc.rate, Total: calc.amount, Currency: calc.currency,
+          CBM: h.cbm, Handling: h.handlingMode || 'Loose', Vehicle: h.vehicleType || '', Trucks: h.truckCount || '',
+          'Package Qty': h.packageLines?.length > 1 ? pkgDisplay(h) : h.packageQty ?? '',
+          'Package UOM': h.packageLines?.length > 1 ? 'Multi' : h.packageUom || '',
+          Rate: calc.rate, Total: calc.amount, Currency: calc.currency,
         }
       }),
       'Manual Handling',
@@ -441,8 +492,9 @@ export default function StorageHandling() {
                 <thead>
                   <tr>
                     <th>Date</th><th>Customer</th><th>Reference</th>
-                    <th className="num">CBM</th><th className="num">Pkg Qty</th><th>Pkg UOM</th>
-                    <th className="num">Rate/CBM</th><th className="num">Total</th><th>Currency</th><th></th>
+                    <th className="num">CBM</th><th>Handling</th><th>Vehicle</th><th className="num">Trucks</th>
+                    <th className="num">Pkg Qty</th><th>Pkg UOM</th>
+                    <th className="num">Rate</th><th className="num">Total</th><th>Currency</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -454,8 +506,11 @@ export default function StorageHandling() {
                         <td><b>{h.customerName}</b></td>
                         <td>{h.reference || '—'}</td>
                         <td className="num">{fmtNum(h.cbm)}</td>
-                        <td className="num">{h.packageQty != null && h.packageQty !== '' ? fmtNum(h.packageQty) : '—'}</td>
-                        <td>{h.packageUom || '—'}</td>
+                        <td>{h.handlingMode || 'Loose'}</td>
+                        <td>{h.vehicleType || '—'}</td>
+                        <td className="num">{h.truckCount ?? '—'}</td>
+                        <td className="num" style={{ whiteSpace: 'nowrap' }}>{pkgDisplay(h)}</td>
+                        <td>{h.packageLines?.length > 1 ? <span className="badge badge-blue">MULTI</span> : h.packageUom || '—'}</td>
                         <td className="num">{fmtNum(calc.rate)}</td>
                         <td className="num">
                           <b>{fmtNum(calc.amount)}</b>
